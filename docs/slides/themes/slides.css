@@ -20,6 +20,7 @@ section {
     --target: #e78ac3;
 }
 
+
 /* REF: https://github.com/yhatt/marp/issues/119 */
 img {
     background-color: transparent !important;
@@ -81,8 +82,6 @@ h6 {
 }
 
 .center {
-    margin: auto;
-    width: 50%;
     text-align: center;
 }
 
@@ -95,4 +94,9 @@ h6 {
 /* adds total slides to paginate */
 section::after {
     content: attr(data-marpit-pagination) '/' attr(data-marpit-pagination-total);
+}
+
+section.center {
+    justify-content: center;
+    text-align: center;
 }
