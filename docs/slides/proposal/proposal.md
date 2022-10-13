@@ -135,13 +135,32 @@ diagram of how all the variables are related
 
 # We don't know what we're after ahead of time
 
+*[somehow show a bunch of possible metrics]*
+
 --- 
 
 # Network statistics are typically related
 
+*[figure from statistical connectomics]*
+
 ---
 
 # Causal inference is hard
+
+---
+
+<!-- _class: center -->
+# What we do here
+
+---
+# Methods of two-sample testing for networks 
+- Matched vs. unmatched 
+- Global vs. meso vs. local (texture)
+
+---
+# Power
+- Examine the relative power of each of these methods, what can we even say w/
+  confidence about differences between two connectomes? 
 
 ---
 

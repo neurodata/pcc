@@ -6,12 +6,12 @@ authors = ["Benjamin D. Pedigo <bpedigo@jhu.edu>"]
 
 [tool.poetry.dependencies]
 python = "3.9.*"
-scikit-learn = "^0.24.2"
+scikit-learn = "^1.1.1"
 umap-learn = "^0.5.1"
 anytree = "^2.8.0"
 pkg = {path = "pkg", develop = true}
-graspologic = "^1.0.0"
-giskard = {path = "../giskard", develop = true}
+graspologic = {path = "../graspologic", develop = true}
+giskard-toolbox = {path = "../giskard", develop = true}
 statsmodels = "^0.13.0"
 jupyter-client = "6.1.12" # https://github.com/jupyter/jupyter_client/issues/637
 svgutils = "^0.3.4"
@@ -19,7 +19,7 @@ navis = "^1.2.1"
 python-catmaid = "^2.0.6"
 
 [tool.poetry.dev-dependencies]
-black = "^22.3.0"
+black = "^22.6.0"
 flake8 = "^3.9.2"
 rope = "^0.20.1"
 jupyter = "^1.0.0"
