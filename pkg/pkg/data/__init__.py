@@ -12,5 +12,6 @@ from .load_data import (
     load_palette,
     load_unmatched,
     load_matched,
+    DATA_PATH,
 )
 from .preprocess import select_nice_nodes
