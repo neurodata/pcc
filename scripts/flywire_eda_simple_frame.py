@@ -11,20 +11,30 @@ from pkg.plot import SIDE_PALETTE, set_theme
 from neuropull.graph import AdjacencyFrame
 
 
-
 dataset = "flywire"
 version = "526"
 data_dir = DATA_PATH / "flywire" / "526"
 
 # %%
-nodes = pd.read_csv(data_dir / "nodes.csv.gz", index_col=0)
-edges = pd.read_csv(data_dir / "edgelist.csv.gz", header=None)
-edges.rename(columns={0: "source", 1: "target", 2: "weight"}, inplace=True)
+og_nodes = pd.read_csv(data_dir / "nodes.csv.gz", index_col=0)
+og_edges = pd.read_csv(data_dir / "edgelist.csv.gz", header=None)
+og_edges.rename(columns={0: "source", 1: "target", 2: "weight"}, inplace=True)
 
-g = nx.from_pandas_edgelist(edges, edge_attr="weight", create_using=nx.DiGraph())
+# g = nx.from_pandas_edgelist(edges, edge_attr="weight", create_using=nx.DiGraph())
 
-class NetworkFrame:
-    def __init__():
+# #%%
+
+
+# #%%
+# from neuropull.graph.base_frame import BaseFrame
+
+# class _EdgeData:
+
+# class NetworkFrame:
+#     def __init__(self, nodes, edges):
+#         self.nodes = nodes
+#         self.edges = edges
+
 
 #%%
 
