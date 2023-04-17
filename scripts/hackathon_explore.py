@@ -3,9 +3,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from pkg.data import DATA_PATH
 
 #%%
+
+# NOTE: replace with wherever you have the data stored
+
+from pkg.data import DATA_PATH
 
 data_dir = DATA_PATH / "hackathon"
 
