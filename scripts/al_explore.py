@@ -6,18 +6,41 @@ import seaborn as sns
 import polars as pl
 
 from scipy import sparse
+from pkg.data import DATA_PATH
+from pkg.io import OUT_PATH
 
 from graspologic.match import graph_match
 from scipy.optimize import linear_sum_assignment
+from giskard.plot import confusionplot
+
+from pkg.io import glue as default_glue
+from pkg.io import savefig
+from neuropull.graph import NetworkFrame
+
+from tqdm.autonotebook import tqdm
+import time
+from joblib import Parallel, delayed
+from giskard.plot import upset_catplot
 
 
-#%%
-
-# NOTE: replace with wherever you have the data stored
-
-from pkg.data import DATA_PATH
+DISPLAY_FIGS = True
+FILENAME = "al_explore"
 
 data_dir = DATA_PATH / "hackathon"
+
+
+def glue(name, var, **kwargs):
+    default_glue(name, var, FILENAME, **kwargs)
+
+
+def gluefig(name, fig, **kwargs):
+    savefig(name, foldername=FILENAME, **kwargs)
+
+    glue(name, fig, figure=True)
+
+    if not DISPLAY_FIGS:
+        plt.close()
+
 
 #%% [markdown]
 
@@ -78,9 +101,6 @@ edges.query(
     "~((source in @missing_node_ids) or (target in @missing_node_ids))", inplace=True
 )
 
-
-from neuropull.graph import NetworkFrame
-
 flywire = NetworkFrame(nodes, edges)
 
 #%%
@@ -103,11 +123,6 @@ al_right = al.query_nodes("side == 'right'")
 #%%
 
 #%%
-# nblast = pd.read_feather(
-#     data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather"
-# )
-
-#%%
 nblast = pl.scan_ipc(data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather")
 index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
 columns = pd.Index(nblast.columns[1:])
@@ -118,7 +133,6 @@ column_ids_map = dict(zip(column_ids, columns))
 index_ids_reverse_map = dict(zip(index, index_ids))
 column_ids_reverse_map = dict(zip(columns, column_ids))
 
-# columns = nblast.select('columns').collect().to_pandas()
 query_node_ids = np.concatenate((al_left.nodes.index, al_right.nodes.index))
 query_index = pd.Series([index_ids_map[i] for i in query_node_ids])
 query_columns = pd.Series(["index"] + [column_ids_map[i] for i in query_node_ids])
@@ -152,7 +166,6 @@ adjacency_right = al_right.to_sparse_adjacency().astype(float)
 #%%
 # rescaling everything...
 
-
 desired_norm = 10_000
 
 adjacency_left *= desired_norm / sparse.linalg.norm(adjacency_left)
@@ -165,15 +178,15 @@ nblast_between_left_right *= desired_norm / np.sum(
     nblast_between_left_right[rows, cols]
 )
 
-#%%
+# #%%
 
-left_inputs = [adjacency_left, nblast_within_left]
-right_inputs = [adjacency_right, nblast_within_right]
-between_input = nblast_between_left_right
+# left_inputs = [adjacency_left, nblast_within_left]
+# right_inputs = [adjacency_right, nblast_within_right]
+# between_input = nblast_between_left_right
 
-row_inds, col_inds, score, misc = graph_match(
-    left_inputs, right_inputs, S=between_input, verbose=3
-)
+# row_inds, col_inds, score, misc = graph_match(
+#     left_inputs, right_inputs, S=between_input, verbose=3
+# )
 
 # %%
 
@@ -192,25 +205,9 @@ def create_matched_nodes(row_inds, col_inds):
 
 
 #%%
-matched_nodes = create_matched_nodes(row_inds, col_inds)
-colabeling = matched_nodes[["hemibrain_type_left", "hemibrain_type_right"]].dropna()
 
-from giskard.plot import confusionplot
 
-confusionplot(
-    colabeling["hemibrain_type_left"],
-    colabeling["hemibrain_type_right"],
-    annot=True,
-    figsize=(20, 20),
-)
-
-#%%
-
-from tqdm.autonotebook import tqdm
-import time
-from joblib import Parallel, delayed
-
-dummy = False
+dummy = True
 if dummy:
     adjacency1 = adjacency_left[:100, :100]
     adjacency2 = adjacency_right[:100, :100]
@@ -317,60 +314,65 @@ n_init = 10
 
 type_col = "hemibrain_type"
 
-metrics = []
-for nblast_between in [True, False]:
-    for nblast_within in [True, False]:
-        for connectivity in [True, False]:
-            for transport in [True, False]:
-                print("----")
-                print("NBLAST between, NBLAST within, connectivity, transport")
-                print(nblast_between, nblast_within, connectivity, transport)
+RERUN_EXPERIMENT = True
 
-                if not (nblast_between or nblast_within or connectivity):
-                    continue
+if RERUN_EXPERIMENT:
+    metrics = []
+    for nblast_between in [True, False]:
+        for nblast_within in [True, False]:
+            for connectivity in [True, False]:
+                for transport in [True, False]:
+                    print("----")
+                    print("NBLAST between, NBLAST within, connectivity, transport")
+                    print(nblast_between, nblast_within, connectivity, transport)
 
-                currtime = time.time()
+                    if not (nblast_between or nblast_within or connectivity):
+                        continue
 
-                options = (nblast_between, nblast_within, connectivity, transport)
-                outs = match_experiment(*options, n_init=n_init)
-                for out in outs:
+                    currtime = time.time()
 
-                    indices1, indices2, score, misc = out
+                    options = (nblast_between, nblast_within, connectivity, transport)
+                    outs = match_experiment(*options, n_init=n_init)
+                    for out in outs:
 
-                    matched_nodes = create_matched_nodes(indices1, indices2)
-                    colabeling = matched_nodes[
-                        [f"{type_col}_left", f"{type_col}_right"]
-                    ].dropna()
+                        indices1, indices2, score, misc = out
 
-                    acc = np.mean(
-                        colabeling[f"{type_col}_left"]
-                        == colabeling[f"{type_col}_right"]
-                    )
+                        matched_nodes = create_matched_nodes(indices1, indices2)
+                        colabeling = matched_nodes[
+                            [f"{type_col}_left", f"{type_col}_right"]
+                        ].dropna()
 
-                    conn_score, nblast_score, nblast_between_score = compute_scores(
-                        indices1, indices2
-                    )
+                        acc = np.mean(
+                            colabeling[f"{type_col}_left"]
+                            == colabeling[f"{type_col}_right"]
+                        )
 
-                    metrics.append(
-                        {
-                            "nblast_between": nblast_between,
-                            "nblast_within": nblast_within,
-                            "connectivity": connectivity,
-                            "transport": transport,
-                            "accuracy": acc,
-                            "conn_score": conn_score,
-                            "nblast_score": nblast_score,
-                            "nblast_between_score": nblast_between_score,
-                        }
-                    )
-                print(f"{time.time() - currtime:.3f} seconds elapsed.")
-                print()
+                        conn_score, nblast_score, nblast_between_score = compute_scores(
+                            indices1, indices2
+                        )
 
-results = pd.DataFrame(metrics)
+                        metrics.append(
+                            {
+                                "nblast_between": nblast_between,
+                                "nblast_within": nblast_within,
+                                "connectivity": connectivity,
+                                "transport": transport,
+                                "accuracy": acc,
+                                "conn_score": conn_score,
+                                "nblast_score": nblast_score,
+                                "nblast_between_score": nblast_between_score,
+                            }
+                        )
+                    print(f"{time.time() - currtime:.3f} seconds elapsed.")
+                    print()
+    results = pd.DataFrame(metrics)
+    results.to_csv(OUT_PATH / FILENAME / "match_results.csv")
+
+else:
+    results = pd.read_csv(OUT_PATH / FILENAME / "match_results.csv", index_col=0)
+
 
 #%%
-
-from giskard.plot import upset_catplot
 
 
 upset_catplot(
@@ -398,3 +400,13 @@ upset_catplot(
 )
 
 # %%
+#%%
+# matched_nodes = create_matched_nodes(row_inds, col_inds)
+# colabeling = matched_nodes[["hemibrain_type_left", "hemibrain_type_right"]].dropna()
+
+# confusionplot(
+#     colabeling["hemibrain_type_left"],
+#     colabeling["hemibrain_type_right"],
+#     annot=True,
+#     figsize=(20, 20),
+# )
