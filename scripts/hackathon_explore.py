@@ -72,6 +72,10 @@ edges.query(
 )
 
 
+from neuropull.graph import NetworkFrame
+
+flywire = NetworkFrame(nodes, edges)
+
 # %% [markdown]
 
 # ## Male CNS
@@ -128,9 +132,6 @@ print("Number of missing nodes: ", len(missing_node_ids))
 # ! ! !
 
 #%%
-from neuropull.graph import NetworkFrame
-
-flywire = NetworkFrame(nodes, edges)
 
 malecns = NetworkFrame(nodes, edges)
 
@@ -169,40 +170,78 @@ rotate_labels(ax)
 flywire.largest_connected_component(inplace=True, verbose=True)
 malecns.largest_connected_component(inplace=True, verbose=True)
 
+#%%
+
+from graspologic.utils import pass_to_ranks
+
+flywire_adj = flywire.to_sparse_adjacency()
+malecns_adj = malecns.to_sparse_adjacency()
+
+ptr = True
+
+if ptr:
+    flywire_adj = pass_to_ranks(flywire_adj)
+    malecns_adj = pass_to_ranks(malecns_adj)
 
 # %%
 
 from graspologic.embed import LaplacianSpectralEmbed
 
-n_components = 8
+n_components = 64
 lse = LaplacianSpectralEmbed(n_components=n_components, form="R-DAD", concat=True)
-flywire_adj = flywire.to_sparse_adjacency()
 flywire_X_lse = lse.fit_transform(flywire_adj)
 
 lse = LaplacianSpectralEmbed(n_components=n_components, form="R-DAD", concat=True)
-malecns_adj = malecns.to_sparse_adjacency()
 malecns_X_lse = lse.fit_transform(malecns_adj)
+
+flywire_X_lse = pd.DataFrame(index=flywire.nodes.index, data=flywire_X_lse)
+malecns_X_lse = pd.DataFrame(index=malecns.nodes.index, data=malecns_X_lse)
+
 
 # %%
 
 from giskard.plot import pairplot
 
 palette = dict(
-    zip(flywire.nodes["super_class"].value_counts().index, sns.color_palette("tab20"))
+    zip(joint_nodes["super_class"].value_counts().index, sns.color_palette("tab20"))
 )
 
 pairplot(
-    flywire_X_lse[:, :8],
+    flywire_X_lse[flywire_X_lse.columns[:8]].values,
     labels=flywire.nodes["super_class"],
     subsample=0.1,
     palette=palette,
-    alpha=0.1,
+    alpha=0.2,
+)
+
+pairplot(
+    malecns_X_lse[malecns_X_lse.columns[:8]].values,
+    labels=malecns.nodes["super_class"],
+    subsample=0.1,
+    palette=palette,
+    alpha=0.2,
 )
 
 #%%
 
-flywire_X_lse = pd.DataFrame(index=flywire.nodes.index, data=flywire_X_lse)
-malecns_X_lse = pd.DataFrame(index=malecns.nodes.index, data=malecns_X_lse)
+palette = dict(zip(joint_nodes["side"].value_counts().index, sns.color_palette("Set2")))
+
+pairplot(
+    flywire_X_lse[flywire_X_lse.columns[:8]].values,
+    labels=flywire.nodes["side"],
+    subsample=0.1,
+    palette=palette,
+    alpha=0.2,
+)
+
+pairplot(
+    malecns_X_lse[malecns_X_lse.columns[:8]].values,
+    labels=malecns.nodes["side"],
+    subsample=0.1,
+    palette=palette,
+    alpha=0.2,
+)
+
 
 #%%
 
@@ -296,24 +335,69 @@ from sklearn.decomposition import PCA
 pca = PCA(n_components=64)
 low_d_joint_Y = pca.fit_transform(joint_Y)
 
+labels = len(flywire_Y) * ["flywire"] + len(malecns_Y) * ["malecns"]
+
+pairplot(low_d_joint_Y[:, :8], labels=labels, subsample=0.1, alpha=0.1)
+
 #%%
 
 from sklearn.neighbors import NearestNeighbors
 
 metric = "cosine"
-joint_Y_nn = NearestNeighbors(n_neighbors=1000, metric="cosine")
+max_k = 10000
+joint_Y_nn = NearestNeighbors(n_neighbors=max_k, metric="cosine")
 joint_Y_nn.fit(joint_Y)
 
-test_joint_Y = joint_Y.loc[test_matches.iloc[0]]
+i = 0
+test_joint_Y = joint_Y.loc[test_matches.iloc[i]]
 
 indices = joint_Y_nn.kneighbors(test_joint_Y, return_distance=False)
 
-joint_Y.index[indices]
+og_shape = indices.shape
+indices_flat = indices.flatten()
+rank_neighbor_ids = joint_Y.index[indices_flat].values.reshape(og_shape)
+rank_neighbor_ids = pd.DataFrame(index=test_joint_Y.index, data=rank_neighbor_ids)
+
+rows = []
+# flywire left
+row_ilocs, col_ilocs = np.where(
+    rank_neighbor_ids == test_matches.iloc[i]["flywire_left"]
+)
+row_locs = test_joint_Y.index[row_ilocs]
+
+rows.append({''})
+# col_locs = joint_Y.index[col_ilocs]
+
+
+#%%
+# malecns left
+row_ilocs, col_ilocs = np.where(
+    rank_neighbor_ids == test_matches.iloc[i]["malecns_left"]
+)
 
 
 #%%
 
-from sklearn.neighbors import NearestNeighbors
+# flywire right
+row_ilocs, col_ilocs = np.where(
+    rank_neighbor_ids == test_matches.iloc[i]["flywire_right"]
+)
 
-metric = "cosine"
-flywire_nn = NearestNeighbors(n_neighbors=1, metric="cosine")
+# malecns right
+row_ilocs, col_ilocs = np.where(
+    rank_neighbor_ids == test_matches.iloc[i]["malecns_right"]
+)
+
+#%%
+
+# antennal lobe
+# pull everything which has:
+# cell_class 'ALPN'
+# cell_class 'olfactory'
+# cell_class 'thermosensory'
+# cell_class 'hygrosensory'
+# cell_class 'ALLN'
+# cell_class 'ALON'
+# cell_class 'ALIN'
+
+# hemibrain_type

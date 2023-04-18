@@ -21,6 +21,7 @@ python-catmaid = "^2.0.6"
 networkx = "<3.0" # capped from graspologic not being compatible
 numpy = "<1.24.0" # capped from numba issue
 pandas = {extras = ["feather"], version = "^2.0.0"}
+polars = "^0.17.5"
 
 
 [tool.poetry.dev-dependencies]

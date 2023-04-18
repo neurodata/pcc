@@ -1963,6 +1963,31 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "polars"
+version = "0.17.5"
+description = "Blazingly fast DataFrame library"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+typing_extensions = {version = ">=4.0.1", markers = "python_version < \"3.11\""}
+
+[package.extras]
+all = ["polars[connectorx,deltalake,fsspec,matplotlib,numpy,pandas,pyarrow,sqlalchemy,timezone,xlsx2csv,xlsxwriter]"]
+connectorx = ["connectorx"]
+deltalake = ["deltalake (>=0.8.0)"]
+fsspec = ["fsspec"]
+matplotlib = ["matplotlib"]
+numpy = ["numpy (>=1.16.0)"]
+pandas = ["pandas", "pyarrow (>=7.0.0)"]
+pyarrow = ["pyarrow (>=7.0.0)"]
+sqlalchemy = ["pandas", "sqlalchemy"]
+timezone = ["backports.zoneinfo", "tzdata"]
+xlsx2csv = ["xlsx2csv (>=0.8.0)"]
+xlsxwriter = ["xlsxwriter"]
+
+[[package]]
 name = "POT"
 version = "0.9.0"
 description = "Python Optimal Transport Library"
@@ -3304,7 +3329,7 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "1.1"
 python-versions = "3.9.*"
-content-hash = "d554482b59ff898516abed8cc649b7cce65aca8981797cf2e90d2a7630b322ac"
+content-hash = "42cf738aac880ea37a780cc0eabd9d8697642009bd5621f76b88dd8243f20ad5"
 
 [metadata.files]
 adjustText = [
@@ -4656,6 +4681,14 @@ plumbum = [
 ply = [
     {file = "ply-3.11-py2.py3-none-any.whl", hash = "sha256:096f9b8350b65ebd2fd1346b12452efe5b9607f7482813ffca50c22722a807ce"},
     {file = "ply-3.11.tar.gz", hash = "sha256:00c7c1aaa88358b9c765b6d3000c6eec0ba42abca5351b095321aef446081da3"},
+]
+polars = [
+    {file = "polars-0.17.5-cp37-abi3-macosx_10_7_x86_64.whl", hash = "sha256:3ec088bb68c2b833f1172b85dc1222ae88732ce0ae7de34590dd387204a84b1b"},
+    {file = "polars-0.17.5-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:1f5389d29d5e5e993a9a361801d54dccd0399cedb72632274b341e27957c631c"},
+    {file = "polars-0.17.5-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4518d2a70bf69eaae04437a241f6d81f2d576e4491d8d4b45c95eacb53415616"},
+    {file = "polars-0.17.5-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6fbe7dc6be495d1805f8252bc6bcfb0372134595bea0ebf7c46db21bad86bf58"},
+    {file = "polars-0.17.5-cp37-abi3-win_amd64.whl", hash = "sha256:7f112d6cefb37a32fc723195f0be1f62ec528b5f83905ad2e614bc78585a0313"},
+    {file = "polars-0.17.5.tar.gz", hash = "sha256:7db2da068e983312238799ad8263e80544151304aac0bc2e6511f91cb56af54d"},
 ]
 POT = [
     {file = "POT-0.9.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:7484e1b9cb7852b9fa94c9af7317f9bfafee937be5893d6e12e867098fe6f9d6"},
