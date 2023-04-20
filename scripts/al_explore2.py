@@ -49,137 +49,140 @@ def gluefig(name, fig, **kwargs):
 
 # %%
 
-dataset = "fafb_flywire"
-dataset_dir = data_dir / dataset
 
-#%%
-nodes = pd.read_csv(dataset_dir / f"{dataset}_meta.csv")
-nodes.drop("row_id", axis=1, inplace=True)
-nodes.rename(columns={"root_id": "node_id"}, inplace=True)
+def load_flywire_networkframe():
+    data_dir = DATA_PATH / "hackathon"
 
-# NOTE:
-# some nodes have multiple rows in the table
-# strategy here is to keep the first row that has a hemibrain type, though that
-# could be changed
-node_counts = nodes.value_counts("node_id")
-dup_nodes = nodes.query(
-    "node_id.isin(@node_counts[@node_counts > 1].index)"
-).sort_values("node_id")
-keep_rows = (
-    dup_nodes.sort_values("hemibrain_type")
-    .drop_duplicates("node_id", keep="first")
-    .index
-)
-drop_rows = dup_nodes.index.difference(keep_rows)
-nodes.drop(drop_rows, inplace=True)
+    dataset = "fafb_flywire"
+    dataset_dir = data_dir / dataset
 
-nodes["cell_type_filled"] = nodes["cell_type"].fillna(nodes["hemibrain_type"])
+    nodes = pd.read_csv(dataset_dir / f"{dataset}_meta.csv")
+    nodes.drop("row_id", axis=1, inplace=True)
+    nodes.rename(columns={"root_id": "node_id"}, inplace=True)
 
-nodes.set_index("node_id", inplace=True)
-nodes.head()
+    # NOTE:
+    # some nodes have multiple rows in the table
+    # strategy here is to keep the first row that has a hemibrain type, though that
+    # could be changed
+    node_counts = nodes.value_counts("node_id")  # noqa: F841
+    dup_nodes = nodes.query(
+        "node_id.isin(@node_counts[@node_counts > 1].index)"
+    ).sort_values("node_id")
+    keep_rows = (
+        dup_nodes.sort_values("hemibrain_type")
+        .drop_duplicates("node_id", keep="first")
+        .index
+    )
+    drop_rows = dup_nodes.index.difference(keep_rows)
+    nodes.drop(drop_rows, inplace=True)
 
-#%%
-edges = pd.read_feather(dataset_dir / f"{dataset}_edges.feather")
-edges.rename(
-    columns={
-        "pre_pt_root_id": "source",
-        "post_pt_root_id": "target",
-        "syn_count": "weight",
-        "neuropil": "region",
-    },
-    inplace=True,
-)
-edges.head()
+    nodes["cell_type_filled"] = nodes["cell_type"].fillna(nodes["hemibrain_type"])
 
-#%%
+    nodes.set_index("node_id", inplace=True)
 
-# NOTE: there are some edges that reference nodes that are not in the node table
+    edges = pd.read_feather(dataset_dir / f"{dataset}_edges.feather")
+    edges.rename(
+        columns={
+            "pre_pt_root_id": "source",
+            "post_pt_root_id": "target",
+            "syn_count": "weight",
+            "neuropil": "region",
+        },
+        inplace=True,
+    )
 
-referenced_node_ids = np.union1d(edges["source"].unique(), edges["target"].unique())
-isin_node_table = np.isin(referenced_node_ids, nodes.index)
-missing_node_ids = referenced_node_ids[~isin_node_table]
-print("Number of missing nodes: ", len(missing_node_ids))
+    # NOTE: there are some edges that reference nodes that are not in the node table
+    referenced_node_ids = np.union1d(edges["source"].unique(), edges["target"].unique())
+    isin_node_table = np.isin(referenced_node_ids, nodes.index)
+    missing_node_ids = referenced_node_ids[~isin_node_table]  # noqa: F841
 
-edges.query(
-    "~((source in @missing_node_ids) or (target in @missing_node_ids))", inplace=True
-)
+    edges.query(
+        "~((source in @missing_node_ids) or (target in @missing_node_ids))",
+        inplace=True,
+    )
 
-flywire = NetworkFrame(nodes, edges)
+    flywire = NetworkFrame(nodes, edges)
+    return flywire
 
-#%%
 
-al_types = [
-    "ALPN",
-    "olfactory",
-    "thermosensory",
-    "hygrosensory",
-    "ALLN",
-    "ALON",
-    "ALIN",
-]
-al = flywire.query_nodes(f"cell_class.isin({al_types})")
+def load_flywire_nblast_subset(queries):
+    data_dir = DATA_PATH / "hackathon"
 
-#%%
+    nblast = pl.scan_ipc(
+        data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather"
+    )
+    index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
+    columns = pd.Index(nblast.columns[1:])
+    index_ids = index.str.split(",", expand=True).get_level_values(0).astype(int)
+    column_ids = columns.str.split(",", expand=True).get_level_values(0).astype(int)
+    index_ids_map = dict(zip(index_ids, index))
+    column_ids_map = dict(zip(column_ids, columns))
+    index_ids_reverse_map = dict(zip(index, index_ids))
+    column_ids_reverse_map = dict(zip(columns, column_ids))
+
+    query_node_ids = np.concatenate(queries)
+    query_index = pd.Series([index_ids_map[i] for i in query_node_ids])
+    query_columns = pd.Series(["index"] + [column_ids_map[i] for i in query_node_ids])
+
+    nblast = nblast.with_columns(
+        pl.col("index").is_in(query_index).alias("select_index")
+    )
+
+    mini_nblast = (
+        nblast.filter(pl.col("select_index"))
+        .select(query_columns)
+        .collect()
+        .to_pandas()
+    ).set_index("index")
+
+    mini_nblast.index = mini_nblast.index.map(index_ids_reverse_map)
+    mini_nblast.columns = mini_nblast.columns.map(column_ids_reverse_map)
+
+    return mini_nblast
+
+
+def select_al(flywire):
+    al_types = [
+        "ALPN",
+        "olfactory",
+        "thermosensory",
+        "hygrosensory",
+        "ALLN",
+        "ALON",
+        "ALIN",
+    ]
+    al = flywire.query_nodes(f"cell_class.isin({al_types})")
+    return al
+
+score_col = "cell_type_filled"
+
+flywire = load_flywire_networkframe()
+al = select_al(flywire)
 al_left = al.query_nodes("side == 'left'")
 al_right = al.query_nodes("side == 'right'")
+al_left.nodes.sort_values()
 
-#%%
-
-#%%
-nblast = pl.scan_ipc(data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather")
-index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
-columns = pd.Index(nblast.columns[1:])
-index_ids = index.str.split(",", expand=True).get_level_values(0).astype(int)
-column_ids = columns.str.split(",", expand=True).get_level_values(0).astype(int)
-index_ids_map = dict(zip(index_ids, index))
-column_ids_map = dict(zip(column_ids, columns))
-index_ids_reverse_map = dict(zip(index, index_ids))
-column_ids_reverse_map = dict(zip(columns, column_ids))
-
-query_node_ids = np.concatenate((al_left.nodes.index, al_right.nodes.index))
-query_index = pd.Series([index_ids_map[i] for i in query_node_ids])
-query_columns = pd.Series(["index"] + [column_ids_map[i] for i in query_node_ids])
-
-nblast = nblast.with_columns(pl.col("index").is_in(query_index).alias("select_index"))
-
-mini_nblast = (
-    nblast.filter(pl.col("select_index")).select(query_columns).collect().to_pandas()
-).set_index("index")
-
-mini_nblast.index = mini_nblast.index.map(index_ids_reverse_map)
-mini_nblast.columns = mini_nblast.columns.map(column_ids_reverse_map)
-
-nblast = mini_nblast
-
-#%%
+nblast = load_flywire_nblast_subset((al_left.nodes.index, al_right.nodes.index))
 
 nblast_within_left = nblast.loc[al_left.nodes.index, al_left.nodes.index].values
 nblast_within_right = nblast.loc[al_right.nodes.index, al_right.nodes.index].values
-nblast_between_left_right = nblast.loc[al_left.nodes.index, al_right.nodes.index].values
+nblast_between = nblast.loc[al_left.nodes.index, al_right.nodes.index].values
 
-nblast_within_left = sparse.csr_array(nblast_within_left)
-nblast_within_right = sparse.csr_array(nblast_within_right)
-
-#%%
-
-adjacency_left = al_left.to_sparse_adjacency().astype(float)
-adjacency_right = al_right.to_sparse_adjacency().astype(float)
-
+adjacency_left = al_left.to_adjacency().values.astype(float)
+adjacency_right = al_right.to_adjacency().values.astype(float)
 
 #%%
 # rescaling everything...
 
 desired_norm = 10_000
 
-adjacency_left *= desired_norm / sparse.linalg.norm(adjacency_left)
-adjacency_right *= desired_norm / sparse.linalg.norm(adjacency_right)
-nblast_within_left *= desired_norm / sparse.linalg.norm(nblast_within_left)
-nblast_within_right *= desired_norm / sparse.linalg.norm(nblast_within_right)
+adjacency_left *= desired_norm / np.linalg.norm(adjacency_left)
+adjacency_right *= desired_norm / np.linalg.norm(adjacency_right)
+nblast_within_left *= desired_norm / np.linalg.norm(nblast_within_left)
+nblast_within_right *= desired_norm / np.linalg.norm(nblast_within_right)
 
-rows, cols = linear_sum_assignment(nblast_between_left_right, maximize=True)
-nblast_between_left_right *= desired_norm / np.sum(
-    nblast_between_left_right[rows, cols]
-)
+rows, cols = linear_sum_assignment(nblast_between, maximize=True)
+nblast_between *= desired_norm / np.sum(nblast_between[rows, cols])
 
 # %%
 
@@ -199,69 +202,6 @@ def create_matched_nodes(row_inds, col_inds):
 
 #%%
 
-
-dummy = False
-if dummy:
-    adjacency1 = adjacency_left[:100, :100]
-    adjacency2 = adjacency_right[:100, :100]
-    similarity1 = nblast_within_left[:100, :100]
-    similarity2 = nblast_within_right[:100, :100]
-    similarity12 = nblast_between_left_right[:100, :100]
-else:
-    adjacency1 = adjacency_left
-    adjacency2 = adjacency_right
-    similarity1 = nblast_within_left
-    similarity2 = nblast_within_right
-    similarity12 = nblast_between_left_right
-
-n_jobs = -2
-graph_match_kws = dict(transport_regularizer=200)
-
-
-def match_experiment(nblast_between, nblast_within, connectivity, transport, n_init=1):
-    adjs1 = []
-    adjs2 = []
-    if connectivity:
-        adjs1.append(adjacency1)
-        adjs2.append(adjacency2)
-    if nblast_within:
-        adjs1.append(similarity1)
-        adjs2.append(similarity2)
-
-    # Should reduce to the LAP basically, but just wanted to keep the code the same
-    if len(adjs1) == 0:
-        adjs1.append(np.zeros(adjacency1.shape))
-        adjs2.append(np.zeros(adjacency2.shape))
-
-    if nblast_between:
-        S = similarity12
-    else:
-        S = None
-
-    if n_init == 1:
-        outs = graph_match(
-            adjs1,
-            adjs2,
-            S=S,
-            transport=transport,
-            **graph_match_kws,
-        )
-        return [outs]
-    else:
-
-        def run():
-            return graph_match(
-                adjs1,
-                adjs2,
-                S=S,
-                transport=transport,
-                **graph_match_kws,
-            )
-
-        outs = Parallel(n_jobs=n_jobs)(delayed(run)() for _ in range(n_init))
-        return outs
-
-
 def compute_scores(indices1, indices2):
     conn_score = np.linalg.norm(
         adjacency1.todense()[indices1][:, indices1]
@@ -276,6 +216,116 @@ def compute_scores(indices1, indices2):
     return conn_score, nblast_score, nblast_between_score
 
 
+#%%
+
+labels_left = al_left.nodes[score_col].values
+labels_right = al_right.nodes[score_col].values
+
+co_label_mat = labels_left[:, None] == labels_right[None, :]
+
+from scipy.optimize import linear_sum_assignment
+
+row_inds, col_inds = linear_sum_assignment(co_label_mat, maximize=True)
+
+co_label_mat[row_inds, col_inds].mean()
+
+#%%
+graph_match(
+    al_left.to_adjacency(),
+    al_left.to_adjacency(),
+    transport=True,
+)
+
+#%%
+currtime = time.time()
+indices1, indices2, score, misc = graph_match(
+    adjacency_left,
+    adjacency_right,
+    S=nblast_between,
+    transport=True,
+    init="similarity",
+)
+print(f"{time.time() - currtime:.3f} seconds elapsed.")
+
+type_col = "cell_type_filled"
+matched_nodes = create_matched_nodes(indices1, indices2)
+colabeling = matched_nodes[[f"{score_col}_left", f"{score_col}_right"]].dropna()
+acc = np.mean(colabeling[f"{score_col}_left"] == colabeling[f"{score_col}_right"])
+# conn_score, nblast_score, nblast_between_score = compute_scores(indices1, indices2)
+
+print(f"Accuracy: {acc:.3f}")
+# print(f"Connectivity score: {conn_score:.3f}")
+# print(f"NBLAST between score: {nblast_between_score:.3f}")
+
+#%%
+
+import ot
+
+al_left.nodes.sort_values(score_col, inplace=True)
+al_right.nodes.sort_values(score_col, inplace=True)
+
+
+from tqdm.autonotebook import tqdm
+
+sigma = 0.03
+cost = nblast.loc[al_left.nodes.index, al_right.nodes.index].values.copy()
+
+a = np.ones(len(al_left.nodes)) / len(al_left.nodes)
+b = np.ones(len(al_right.nodes)) / len(al_right.nodes)
+
+T = ot.emd(a, b, -cost)
+
+currtime = time.time()
+
+all_T = np.zeros(cost.shape)
+for i in tqdm(range(100)):
+    M = cost + np.random.normal(0, sigma, size=cost.shape)
+    noisy_T = ot.emd(a, b, -M)  # exact linear program
+    all_T += noisy_T
+print(f"{time.time() - currtime:.3f} seconds elapsed.")
+
+#%%
+adjacency_left = al_left.to_adjacency().values
+adjacency_right = al_right.to_adjacency().values
+
+#%%
+
+X_left = adjacency_left.copy()
+X_right = adjacency_right.copy()
+Y_left = adjacency_left.copy().T
+Y_right = adjacency_right.copy().T
+
+
+def normalize(X, axis=1):
+    norm = np.linalg.norm(X, axis=axis)[:, None]
+    norm[norm == 0] = 1
+    X = X / norm
+    return X
+
+
+X_left = normalize(X_left)
+X_right = normalize(X_right)
+Y_left = normalize(Y_left)
+Y_right = normalize(Y_right)
+
+#%%
+conn_cost = (X_left @ all_T @ X_right.T) + (Y_left @ all_T @ Y_right.T)
+
+fig, axs = plt.subplots(1, 2, figsize=(20, 10))
+sns.heatmap(cost, ax=axs[0], square=True, cbar=False)
+sns.heatmap(conn_cost, ax=axs[1], square=True, cbar=False)
+
+#%%
+
+conn_cost = adjacency_left.T @ all_T @ adjacency_right
+
+
+# %%
+
+#%%
+misc[0]["convex_solution"].shape
+
+#%%
 n_init = 10
 
 type_col = "hemibrain_type"
