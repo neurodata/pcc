@@ -6,19 +6,15 @@ import numpy as np
 import ot
 import pandas as pd
 import polars as pl
-from joblib import Parallel, delayed
-from matplotlib.colors import LinearSegmentedColormap
+import seaborn as sns
 from pkg.data import DATA_PATH
 from pkg.io import OUT_PATH
 from pkg.io import glue as default_glue
 from pkg.io import savefig
-from pkg.plot import set_theme
-from scipy import sparse
 from scipy.optimize import linear_sum_assignment
-from sklearn.ensemble import RandomForestClassifier
 from tqdm.autonotebook import tqdm
 
-from giskard.plot import confusionplot, upset_catplot
+from giskard.plot import confusionplot, matrixplot
 from graspologic.match import graph_match
 from neuropull.graph import NetworkFrame
 
@@ -50,7 +46,7 @@ def load_flywire_networkframe():
     dataset = "fafb_flywire"
     dataset_dir = data_dir / dataset
 
-    nodes = pd.read_csv(dataset_dir / f"{dataset}_meta.csv")
+    nodes = pd.read_csv(dataset_dir / f"{dataset}_meta.csv", low_memory=False)
     nodes.drop("row_id", axis=1, inplace=True)
     nodes.rename(columns={"root_id": "node_id"}, inplace=True)
 
@@ -95,7 +91,7 @@ def load_flywire_networkframe():
         inplace=True,
     )
 
-    flywire = NetworkFrame(nodes, edges)
+    flywire = NetworkFrame(nodes.copy(), edges.copy())
     return flywire
 
 
@@ -103,7 +99,8 @@ def load_flywire_nblast_subset(queries):
     data_dir = DATA_PATH / "hackathon"
 
     nblast = pl.scan_ipc(
-        data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather"
+        data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather",
+        memory_map=False,
     )
     index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
     columns = pd.Index(nblast.columns[1:])
@@ -153,11 +150,12 @@ score_col = "cell_type_filled"
 
 flywire = load_flywire_networkframe()
 al = select_al(flywire)
-al_left = al.query_nodes("side == 'left'")
-al_right = al.query_nodes("side == 'right'")
+al_left = al.query_nodes("side == 'left'").copy()
+al_right = al.query_nodes("side == 'right'").copy()
 al_left.nodes.sort_values(score_col, inplace=True)
 al_right.nodes.sort_values(score_col, inplace=True)
 
+#%%
 nblast = load_flywire_nblast_subset((al_left.nodes.index, al_right.nodes.index))
 
 nblast_within_left = nblast.loc[al_left.nodes.index, al_left.nodes.index].values
@@ -246,11 +244,14 @@ print(f"NBLAST score: {nblast_between_score:.3f}")
 
 #%%
 
-sigma = 0.03
+
+sigma = 0.05
 nblast_cost = nblast.loc[al_left.nodes.index, al_right.nodes.index].values.copy()
 
 a = np.ones(len(al_left.nodes)) / len(al_left.nodes)
 b = np.ones(len(al_right.nodes)) / len(al_right.nodes)
+
+single_T = ot.emd(a, b, -nblast_cost)
 
 currtime = time.time()
 
@@ -261,202 +262,40 @@ for i in tqdm(range(100)):
     all_T += noisy_T
 print(f"{time.time() - currtime:.3f} seconds elapsed.")
 
-#%%
-
-# X_left = adjacency_left.copy()
-# X_right = adjacency_right.copy()
-# Y_left = adjacency_left.copy().T
-# Y_right = adjacency_right.copy().T
-# X_left = normalize(X_left)
-# X_right= normalize(X_right)
-# Y_left = normalize(Y_left)
-# Y_right = normalize(Y_right)
-# conn_cost = (X_left @ all_T @ X_right.T) + (Y_left @ all_T @ Y_right.T)
-
-
-A_in = adjacency_left.copy()
-B_in = adjacency_right.copy()
-A_out = adjacency_left.copy()
-B_out = adjacency_right.copy()
-
-
-def normalize(X, axis=1):
-    if axis == 1:
-        norm = np.linalg.norm(X, axis=axis)[:, None]
-    else:
-        norm = np.linalg.norm(X, axis=axis)[None, :]
-    norm[norm == 0] = 1
-    X = X / norm
-    return X
-
-
-A_in = normalize(A_in, axis=0)
-B_in = normalize(B_in, axis=0)
-A_out = normalize(A_out, axis=1)
-B_out = normalize(B_out, axis=1)
-
-in_cost = A_in.T @ all_T @ B_in
-
-from giskard.plot import matrixplot
-
-out_cost = A_out @ all_T @ B_out.T
-
-matrixplot(in_cost, square=True, title="Out cost")
-matrixplot(out_cost, square=True, title="Out cost")
-
-conn_cost = in_cost + out_cost
 
 #%%
 
-fig, axs = plt.subplots(1, 2, figsize=(20, 10))
+show_slice = slice(0, 50)
 
-matrixplot(
-    nblast_cost,
-    square=True,
-    title="NBLAST",
-    row_sort_class=al_left.nodes["cell_class"],
-    col_sort_class=al_right.nodes["cell_class"],
-    cbar=False,
-    ax=axs[0],
-)
+fig, axs = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=True)
 
-matrixplot(
-    conn_cost,
-    square=True,
-    title="Connectivity",
-    row_sort_class=al_left.nodes["cell_class"],
-    col_sort_class=al_right.nodes["cell_class"],
-    cbar=False,
-    ax=axs[1],
-)
-gluefig("1-step-cost-comparison", fig, fmts=["png"])
-
-#%%
-
-
-fig, axs = plt.subplots(1, 2, figsize=(20, 10))
-
-matrixplot(cost, ax=axs[0], square=True, cbar=False, title="NBLAST")
-matrixplot(conn_cost, ax=axs[1], square=True, title="Connectivity")
-
-#%%
-
-conn_cost = adjacency_left.T @ all_T @ adjacency_right
-
-
-#%%
-import ot
-
-sort_left_nodes = al_left.nodes.sort_values(score_col)
-sort_right_nodes = al_right.nodes.sort_values(score_col)
-
-a = np.ones(len(al_left.nodes)) / len(al_left.nodes)
-b = np.ones(len(al_right.nodes)) / len(al_right.nodes)
-M = nblast.loc[sort_left_nodes.index, sort_right_nodes.index].values
-reg = 100
-
-currtime = time.time()
-T = ot.emd(a, b, -M)  # exact linear program
-print(f"{time.time() - currtime:.3f} seconds elapsed.")
-
-currtime = time.time()
-T_reg = ot.sinkhorn(a, b, -M, 1e-1)
-print(f"{time.time() - currtime:.3f} seconds elapsed.")
-
-#%%
-import seaborn as sns
-
-
-show_slice = slice(50, 100)
-
-fig, axs = plt.subplots(1, 2, figsize=(20, 10))
-
-matrixplot(
-    M[show_slice, show_slice],
-    row_sort_class=sort_left_nodes.iloc[show_slice][score_col],
-    col_sort_class=sort_right_nodes.iloc[show_slice][score_col],
+matrixplot_kws = dict(
+    row_sort_class=al_left.nodes.iloc[show_slice][score_col],
+    col_sort_class=al_right.nodes.iloc[show_slice][score_col],
     cmap="Blues",
     center=None,
     square=True,
-    cbar_kws=dict(shrink=0.5),
-    row_ticks=False,
     col_ticks=False,
-    ax=axs[0],
+    cbar=False,
+    tick_fontsize=7,
 )
 
-
-#%%
-
-from tqdm.autonotebook import tqdm
-
-sigma = 0.03
-cost = nblast.loc[sort_left_nodes.index, sort_right_nodes.index].values.copy()
-
-T = ot.emd(a, b, -cost)
-
-currtime = time.time()
-
-all_T = np.zeros(cost.shape)
-for i in tqdm(range(100)):
-    M = cost + np.random.normal(0, sigma, size=cost.shape)
-    noisy_T = ot.emd(a, b, -M)  # exact linear program
-    all_T += noisy_T
-print(f"{time.time() - currtime:.3f} seconds elapsed.")
-
-
-#%%
-
-show_slice = slice(0, 100)
-
-fig, axs = plt.subplots(1, 3, figsize=(30, 10), constrained_layout=True)
-
 matrixplot(
-    cost[show_slice, show_slice],
-    row_sort_class=sort_left_nodes.iloc[show_slice][score_col],
-    col_sort_class=sort_right_nodes.iloc[show_slice][score_col],
-    cmap="Blues",
-    center=None,
-    square=True,
-    cbar_kws=dict(shrink=0.5),
-    row_ticks=True,
-    col_ticks=False,
-    ax=axs[0],
-    title="NBLAST",
-    cbar=False,
+    nblast_cost[show_slice, show_slice], ax=axs[0], row_ticks=True, **matrixplot_kws
 )
 axs[0].tick_params(axis="y", rotation=0)
+axs[0].set_title("NBLAST", fontsize="xx-large")
 
 matrixplot(
-    T[show_slice, show_slice],
-    row_sort_class=sort_left_nodes.iloc[show_slice][score_col],
-    # col_sort_class=sort_right_nodes.iloc[show_slice][score_col],
-    cmap="Blues",
-    center=None,
-    square=True,
-    cbar_kws=dict(shrink=0.5),
-    row_ticks=False,
-    col_ticks=False,
-    ax=axs[1],
-    title="Transport",
-    cbar=False,
+    single_T[show_slice, show_slice], ax=axs[1], row_ticks=False, **matrixplot_kws
 )
+axs[1].set_title("Transport solution", fontsize="xx-large")
 
-matrixplot(
-    all_T[show_slice, show_slice],
-    row_sort_class=sort_left_nodes.iloc[show_slice][score_col],
-    # col_sort_class=sort_right_nodes.iloc[show_slice][score_col],
-    cmap="Blues",
-    center=None,
-    square=True,
-    cbar_kws=dict(shrink=0.5),
-    row_ticks=False,
-    col_ticks=False,
-    ax=axs[2],
-    title="Noisy Transport",
-    cbar=False,
-)
+matrixplot(all_T[show_slice, show_slice], ax=axs[2], row_ticks=False, **matrixplot_kws)
+axs[2].set_title("Noisy transport solution", fontsize="xx-large")
 
-gluefig("nblast-noisy-transport-compare", fig)
+gluefig("nblast-noisy-transport-compare", fig, formats=["png"])
+
 
 #%%
 
@@ -503,7 +342,7 @@ def scores_to_predictions(score_matrix, sort_left_nodes, sort_right_nodes):
 
 
 sort_left_nodes, sort_right_nodes = scores_to_predictions(
-    score_matrix, sort_left_nodes, sort_right_nodes
+    score_matrix, al_left.nodes, al_right.nodes
 )
 
 sort_right_nodes[[score_col, "predicted_group", "prediction_conf"]]
@@ -511,19 +350,35 @@ sort_right_nodes[[score_col, "predicted_group", "prediction_conf"]]
 
 #%%
 
-labeled_right_nodes = sort_right_nodes.dropna(axis=0, subset=score_col).copy()
+labeled_right_nodes = sort_right_nodes.dropna(
+    axis=0, subset=[score_col, "predicted_group"]
+).copy()
 labeled_right_nodes[[score_col, "predicted_group", "prediction_conf"]]
+
+accuracy = (
+    labeled_right_nodes[score_col] == labeled_right_nodes["predicted_group"]
+).mean()
 
 true_labels = labeled_right_nodes[score_col].values
 pred_labels = labeled_right_nodes["predicted_group"].values
 
-from sklearn.metrics import accuracy_score
+ax = confusionplot(true_labels, pred_labels)
+gluefig("nblast-noisy-transport-confusion", ax.figure)
 
-accuracy_score(true_labels, pred_labels)
+missed = labeled_right_nodes.query(f"{score_col} != predicted_group")
 
-confusionplot(true_labels, pred_labels)
+ax = confusionplot(missed[score_col], missed["predicted_group"], figsize=(20, 20))
+gluefig("nblast-noisy-transport-confusion-missed", ax.figure)
 
 #%%
+
+al_left.nodes.query(f"{score_col} == 'ORN_DL4'").index
+al_right.nodes.query(f"{score_col} == 'ORN_DL3'").index
+
+#%%
+
+from sklearn.metrics import accuracy_score
+
 rows = []
 for thresh in np.linspace(0.05, 0.99, 50):
     sub_labeled_right_nodes = labeled_right_nodes.query(f"prediction_conf > {thresh}")
@@ -571,15 +426,13 @@ score_df = pd.DataFrame(
 )
 score_df.loc[left_query.index, right_query.index]
 
-sns.clustermap(score_df.loc[left_query.index, right_query.index])
-
 #%%
 sub_score_df = score_df.loc[left_query.index, right_query.index]
 
 #%%
 from sklearn.cluster import SpectralCoclustering
 
-model = SpectralCoclustering(n_clusters=32, random_state=0)
+model = SpectralCoclustering(n_clusters=20, random_state=0)
 model.fit(sub_score_df)
 
 row_labels = model.row_labels_
@@ -614,3 +467,67 @@ res = pd.concat((left_res, right_res), axis=0, ignore_index=True)
 res = res.sort_values(["cluster", "side"])
 
 res.to_clipboard()
+
+#%%
+
+
+def normalize(X, axis=1):
+    if axis == 1:
+        norm = np.linalg.norm(X, axis=axis)[:, None]
+    else:
+        norm = np.linalg.norm(X, axis=axis)[None, :]
+    norm[norm == 0] = 1
+    X = X / norm
+    return X
+
+
+# V1
+
+# X_left = adjacency_left.copy()
+# X_right = adjacency_right.copy()
+# Y_left = adjacency_left.copy().T
+# Y_right = adjacency_right.copy().T
+# X_left = normalize(X_left)
+# X_right= normalize(X_right)
+# Y_left = normalize(Y_left)
+# Y_right = normalize(Y_right)
+# conn_cost = (X_left @ all_T @ X_right.T) + (Y_left @ all_T @ Y_right.T)
+
+# V2
+A_in = adjacency_left.copy()
+B_in = adjacency_right.copy()
+A_out = adjacency_left.copy()
+B_out = adjacency_right.copy()
+
+A_in = normalize(A_in, axis=0)
+B_in = normalize(B_in, axis=0)
+A_out = normalize(A_out, axis=1)
+B_out = normalize(B_out, axis=1)
+
+in_cost = A_in.T @ all_T @ B_in
+out_cost = A_out @ all_T @ B_out.T
+
+conn_cost = in_cost + out_cost
+
+fig, axs = plt.subplots(1, 2, figsize=(20, 10))
+
+matrixplot(
+    nblast_cost,
+    square=True,
+    title="NBLAST",
+    row_sort_class=al_left.nodes["cell_class"],
+    col_sort_class=al_right.nodes["cell_class"],
+    cbar=False,
+    ax=axs[0],
+)
+
+matrixplot(
+    conn_cost,
+    square=True,
+    title="Connectivity",
+    row_sort_class=al_left.nodes["cell_class"],
+    col_sort_class=al_right.nodes["cell_class"],
+    cbar=False,
+    ax=axs[1],
+)
+gluefig("1-step-cost-comparison-v2", fig, formats=["png"])
