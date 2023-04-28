@@ -13,5 +13,7 @@ from .load_data import (
     load_unmatched,
     load_matched,
     DATA_PATH,
+    load_flywire_networkframe,
+    load_flywire_nblast_subset,
 )
 from .preprocess import select_nice_nodes

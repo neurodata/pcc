@@ -19,7 +19,7 @@ from graspologic.match import graph_match
 from neuropull.graph import NetworkFrame
 
 DISPLAY_FIGS = True
-FILENAME = "al_explore"
+FILENAME = "conn_induced_sim"
 
 data_dir = DATA_PATH / "hackathon"
 
@@ -167,7 +167,7 @@ adjacency_right = al_right.to_adjacency().values.astype(float)
 #%%
 # rescaling everything...
 
-desired_norm = 10_000
+desired_norm = 1
 
 adjacency_left_scaled = adjacency_left * desired_norm / np.linalg.norm(adjacency_left)
 adjacency_right_scaled = (
@@ -241,105 +241,8 @@ print(f"Accuracy: {acc:.3f}")
 print(f"Connectivity score: {conn_score:.3f}")
 print(f"NBLAST score: {nblast_between_score:.3f}")
 
-#%%
-
-
-sigma = 0.05
-nblast_cost = nblast.loc[al_left.nodes.index, al_right.nodes.index].values.copy()
-
-a = np.ones(len(al_left.nodes)) / len(al_left.nodes)
-b = np.ones(len(al_right.nodes)) / len(al_right.nodes)
-
-single_T = ot.emd(a, b, -nblast_cost)
-
-currtime = time.time()
-
-all_T = np.zeros(nblast_cost.shape)
-for i in tqdm(range(100)):
-    M = nblast_cost + np.random.normal(0, sigma, size=nblast_cost.shape)
-    noisy_T = ot.emd(a, b, -M)
-    all_T += noisy_T
-print(f"{time.time() - currtime:.3f} seconds elapsed.")
 
 #%%
-regularizers = np.geomspace(5e-3, 1e-1, 20)
-
-show_slice = slice(0, 50)
-
-matrixplot_kws = dict(
-    row_sort_class=al_left.nodes.iloc[show_slice][score_col],
-    col_sort_class=al_right.nodes.iloc[show_slice][score_col],
-    cmap="Blues",
-    center=None,
-    square=True,
-    col_ticks=False,
-    cbar=False,
-    tick_fontsize=7,
-)
-
-sinkhorn_Ts = []
-for i, reg in enumerate(tqdm(regularizers)):
-    sinkhorn_T = ot.sinkhorn(a, b, -nblast_cost, reg=reg)
-    sinkhorn_Ts.append(sinkhorn_T)
-    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-    matrixplot(
-        sinkhorn_T[show_slice, show_slice],
-        row_ticks=True,
-        ax=ax,
-        title=f"{i}, {reg:.2e}",
-        **matrixplot_kws,
-    )
-    gluefig(f"sinkhorn_reg-{i}", fig)
-
-#%%
-i = 12
-reg = regularizers[i]
-sinkhorn_T = sinkhorn_Ts[i]
-ones_a = np.ones(len(al_left.nodes))
-ones_b = np.ones(len(al_right.nodes))
-sinkhorn_T = ot.sinkhorn(ones_a, ones_b, -nblast_cost, reg=reg)
-#%%
-sls = slice(900, 1000)
-sns.heatmap(sinkhorn_T[sls, sls], cmap="Blues")
-
-
-#%%
-
-show_slice = slice(0, 50)
-
-fig, axs = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=True)
-
-matrixplot_kws = dict(
-    row_sort_class=al_left.nodes.iloc[show_slice][score_col],
-    col_sort_class=al_right.nodes.iloc[show_slice][score_col],
-    cmap="Blues",
-    center=None,
-    square=True,
-    col_ticks=False,
-    cbar=False,
-    tick_fontsize=7,
-)
-
-matrixplot(
-    nblast_cost[show_slice, show_slice], ax=axs[0], row_ticks=True, **matrixplot_kws
-)
-axs[0].tick_params(axis="y", rotation=0)
-axs[0].set_title("NBLAST", fontsize="xx-large")
-
-matrixplot(
-    single_T[show_slice, show_slice], ax=axs[1], row_ticks=False, **matrixplot_kws
-)
-axs[1].set_title("Transport solution", fontsize="xx-large")
-
-matrixplot(all_T[show_slice, show_slice], ax=axs[2], row_ticks=False, **matrixplot_kws)
-axs[2].set_title("Noisy transport solution", fontsize="xx-large")
-
-gluefig("nblast-noisy-transport-compare", fig, formats=["png"])
-
-
-#%%
-
-score_matrix = all_T.copy()
 
 
 def scores_to_predictions(score_matrix, sort_left_nodes, sort_right_nodes):
@@ -381,132 +284,21 @@ def scores_to_predictions(score_matrix, sort_left_nodes, sort_right_nodes):
     return sort_left_nodes, sort_right_nodes
 
 
-sort_left_nodes, sort_right_nodes = scores_to_predictions(
-    score_matrix, al_left.nodes, al_right.nodes
-)
-
-sort_right_nodes[[score_col, "predicted_group", "prediction_conf"]]
-
+#%%
 
 #%%
 
-labeled_right_nodes = sort_right_nodes.dropna(
-    axis=0, subset=[score_col, "predicted_group"]
-).copy()
-labeled_right_nodes[[score_col, "predicted_group", "prediction_conf"]]
+nblast_cost = nblast.loc[al_left.nodes.index, al_right.nodes.index].values.copy()
 
-accuracy = (
-    labeled_right_nodes[score_col] == labeled_right_nodes["predicted_group"]
-).mean()
+n = max(len(al_left.nodes), len(al_right.nodes))
+reg = 0.033
+a = np.ones(n)
+b = np.ones(len(al_right.nodes)) * n / len(al_right.nodes)
 
-true_labels = labeled_right_nodes[score_col].values
-pred_labels = labeled_right_nodes["predicted_group"].values
+currtime = time.time()
+sinkhorn_sol = ot.sinkhorn(a, b, -nblast_cost, reg)
+print(f"{time.time() - currtime:.3f} seconds elapsed.")
 
-ax = confusionplot(true_labels, pred_labels)
-gluefig("nblast-noisy-transport-confusion", ax.figure)
-
-missed = labeled_right_nodes.query(f"{score_col} != predicted_group")
-
-ax = confusionplot(missed[score_col], missed["predicted_group"], figsize=(20, 20))
-gluefig("nblast-noisy-transport-confusion-missed", ax.figure)
-
-#%%
-
-al_left.nodes.query(f"{score_col} == 'ORN_DL4'").index
-al_right.nodes.query(f"{score_col} == 'ORN_DL3'").index
-
-#%%
-
-from sklearn.metrics import accuracy_score
-
-rows = []
-for thresh in np.linspace(0.05, 0.99, 50):
-    sub_labeled_right_nodes = labeled_right_nodes.query(f"prediction_conf > {thresh}")
-    true_labels = sub_labeled_right_nodes[score_col].values
-    pred_labels = sub_labeled_right_nodes["predicted_group"].values
-    acc = accuracy_score(true_labels, pred_labels)
-    rows.append(
-        {"thresh": thresh, "acc": acc, "n_classified": len(sub_labeled_right_nodes)}
-    )
-acc_results = pd.DataFrame(rows)
-
-#%%
-fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-sns.lineplot(data=acc_results, x="n_classified", y="acc", ax=ax)
-
-fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-sns.lineplot(data=acc_results, x="thresh", y="acc", ax=ax)
-
-#%%
-
-labeled_right_nodes["is_correct"] = (
-    labeled_right_nodes[score_col] == labeled_right_nodes["predicted_group"]
-)
-bins = pd.qcut(labeled_right_nodes["prediction_conf"], 5)
-labeled_right_nodes.groupby(bins)["is_correct"].mean()  # [1:].mean()
-
-#%%
-fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-sns.lineplot(data=acc_results, x="n_classified", y="acc", ax=ax)
-
-#%%
-query = sort_right_nodes.query("cell_type_filled.isna() & predicted_group.isna()")[
-    [score_col, "predicted_group", "prediction_conf", "cell_class"]
-].sort_values("prediction_conf", ascending=False)
-
-#%%
-left_query = sort_left_nodes.query("cell_type_filled.isna() & predicted_group.isna()")
-right_query = sort_right_nodes.query("cell_type_filled.isna() & predicted_group.isna()")
-
-#%%
-score_df = pd.DataFrame(
-    data=score_matrix,
-    index=sort_left_nodes.index,
-    columns=sort_right_nodes.index,
-)
-score_df.loc[left_query.index, right_query.index]
-
-#%%
-sub_score_df = score_df.loc[left_query.index, right_query.index]
-
-#%%
-from sklearn.cluster import SpectralCoclustering
-
-model = SpectralCoclustering(n_clusters=25, random_state=0)
-model.fit(sub_score_df)
-
-row_labels = model.row_labels_
-col_labels = model.column_labels_
-
-matrixplot(sub_score_df.values, row_sort_class=row_labels, col_sort_class=col_labels)
-
-matrixplot(
-    nblast.loc[left_query.index, right_query.index].values,
-    row_sort_class=row_labels,
-    col_sort_class=col_labels,
-)
-
-#%%
-left_res = pd.concat(
-    (
-        pd.Series(data=sub_score_df.index, name="node_id"),
-        pd.Series(data=row_labels, name="cluster"),
-        pd.Series(data=sub_score_df.shape[0] * ["left"], name="side"),
-    ),
-    axis=1,
-)
-right_res = pd.concat(
-    (
-        pd.Series(data=sub_score_df.columns, name="node_id"),
-        pd.Series(data=col_labels, name="cluster"),
-        pd.Series(data=sub_score_df.shape[1] * ["right"], name="side"),
-    ),
-    axis=1,
-)
-res = pd.concat((left_res, right_res), axis=0, ignore_index=True)
-res = res.sort_values(["cluster", "side"])
-
-res.to_clipboard()
 
 #%%
 
@@ -544,8 +336,8 @@ B_in = normalize(B_in, axis=0)
 A_out = normalize(A_out, axis=1)
 B_out = normalize(B_out, axis=1)
 
-in_cost = A_in.T @ all_T @ B_in
-out_cost = A_out @ all_T @ B_out.T
+in_cost = A_in.T @ sinkhorn_sol @ B_in
+out_cost = A_out @ sinkhorn_sol @ B_out.T
 
 conn_cost = in_cost + out_cost
 
@@ -571,3 +363,53 @@ matrixplot(
     ax=axs[1],
 )
 gluefig("1-step-cost-comparison-v2", fig, formats=["png"])
+
+#%%
+show_slice = slice(0, 50)
+
+
+#%%
+
+reg = 0.10
+a = np.ones(n)
+b = np.ones(len(al_right.nodes)) * n / len(al_right.nodes)
+
+currtime = time.time()
+sinkhorn_conn_sol = ot.sinkhorn(a, b, -conn_cost, reg)
+print(f"{time.time() - currtime:.3f} seconds elapsed.")
+
+#%%
+
+show_slice = slice(1200, 1300)
+
+matrixplot_kws = dict(
+    row_sort_class=al_left.nodes.iloc[show_slice][score_col],
+    col_sort_class=al_right.nodes.iloc[show_slice][score_col],
+    cmap="Blues",
+    center=None,
+    square=True,
+    col_ticks=False,
+    cbar=False,
+    tick_fontsize=7,
+)
+
+
+def quick_matrixplot(A, ax=None, title=None, **kwargs):
+    ax, _, _, _ = matrixplot(
+        A[show_slice, show_slice],
+        row_ticks=True,
+        ax=ax,
+        title=title,
+        **kwargs,
+        **matrixplot_kws,
+    )
+    ax.tick_params(axis="y", rotation=0)
+
+
+fig, axs = plt.subplots(2, 2, figsize=(20, 20))
+quick_matrixplot(nblast_cost, title="NBLAST", ax=axs[0, 0])
+quick_matrixplot(conn_cost, title="Connectivity", ax=axs[0, 1])
+quick_matrixplot(sinkhorn_sol, title="NBLAST Sinkhorn", ax=axs[1, 0])
+quick_matrixplot(sinkhorn_conn_sol, title="Connectivity Sinkhorn", ax=axs[1, 1])
+
+# %%

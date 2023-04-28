@@ -18,6 +18,7 @@ from giskard.plot import confusionplot, matrixplot
 from graspologic.match import graph_match
 from neuropull.graph import NetworkFrame
 from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 from graspologic.embed import AdjacencySpectralEmbed
 from giskard.plot import pairplot
 from umap import UMAP
@@ -181,16 +182,16 @@ side_labels = nodes["side"]
 broad_type_labels = nodes["cell_class"]
 fine_type_labels = nodes["cell_type_filled"].fillna("unknown")
 
+side_palette = dict(zip(["left", "right"], sns.color_palette("Set2", 2)))
+broad_class_palette = dict(zip(broad_type_labels.unique(), sns.color_palette("tab10")))
+
 
 def clustermap(X, D, method="ward", metric="euclidean", **kwargs):
-
+    if X is None:
+        X = squareform(1 - D)
     linkage_matrix = linkage(X, method=method, metric=metric)
 
-    side_palette = dict(zip(["left", "right"], sns.color_palette("Set2", 2)))
     side_colors = pd.Series(side_labels, name="Side").map(side_palette)
-    broad_class_palette = dict(
-        zip(broad_type_labels.unique(), sns.color_palette("tab10"))
-    )
     broad_class_colors = pd.Series(broad_type_labels, name="Cell class").map(
         broad_class_palette
     )
@@ -205,6 +206,7 @@ def clustermap(X, D, method="ward", metric="euclidean", **kwargs):
         xticklabels=False,
         yticklabels=False,
     )
+    cgrid.ax_heatmap.set_ylabel(None)
     return cgrid
 
 
@@ -216,7 +218,7 @@ def side_pairplot(X, n_show=8, title=None):
         hue_order=["left", "right"],
         s=3,
         alpha=0.5,
-        title=title
+        title=title,
     )
     return fig, ax
 
@@ -228,10 +230,15 @@ def class_pairplot(X, n_show=8, title=None):
         palette="tab10",
         s=3,
         alpha=0.5,
-        title=title
+        title=title,
     )
     return fig, ax
 
+
+#%%
+
+cgrid = clustermap(None, nblast)
+gluefig("no_embed_clustermap", cgrid.fig, formats=["png"])
 
 #%%
 
@@ -242,10 +249,27 @@ X_nblast = ase.fit_transform(nblast.values)
 
 #%%
 
-side_pairplot(X_nblast, title='Raw')
-class_pairplot(X_nblast, title='Raw')
-clustermap(X_nblast, nblast)
+fig, ax = side_pairplot(X_nblast, title="Raw")
+gluefig("raw_side_pairplot", fig, formats=["png"])
+fig, ax = class_pairplot(X_nblast, title="Raw")
+gluefig("raw_class_pairplot", fig, formats=["png"])
+cgrid = clustermap(X_nblast, nblast)
+gluefig("raw_clustermap", cgrid.fig, formats=["png"])
 
+#%%
+
+fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+sns.scatterplot(
+    x=X_nblast[:, 3],
+    y=X_nblast[:, 4],
+    hue=side_labels,
+    ax=ax,
+    s=10,
+    alpha=0.8,
+    palette=side_palette,
+)
+ax.set(xticks=[], yticks=[], xlabel="4rd component", ylabel="5th component")
+gluefig("raw_side_scatter", fig, formats=["png"])
 
 # %%
 
@@ -258,49 +282,197 @@ X_nblast_emd = np.concatenate((X_nblast_left, X_nblast_right_emd))
 
 #%%
 
-side_pairplot(X_nblast_emd, title='EMD')
-class_pairplot(X_nblast_emd, title='EMD')
-clustermap(X_nblast_emd, nblast)
+fig, ax = side_pairplot(X_nblast_emd, title="EMD")
+gluefig("emd_side_pairplot", fig, formats=["png"])
+fig, ax = class_pairplot(X_nblast_emd, title="EMD")
+gluefig("emd_class_pairplot", fig, formats=["png"])
+cgrid = clustermap(X_nblast_emd, nblast)
+gluefig("emd_clustermap", fig, formats=["png"])
 
 #%%
 
+fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+sns.scatterplot(
+    x=X_nblast_emd[:, 3],
+    y=X_nblast_emd[:, 4],
+    hue=side_labels,
+    ax=ax,
+    s=10,
+    alpha=0.8,
+    palette=side_palette,
+)
+ax.set(xticks=[], yticks=[], xlabel="4rd component", ylabel="5th component")
+gluefig("emd_side_scatter", fig, formats=["png"])
+
+#%%
+
+regularizers = np.geomspace(1e-4, 5e-3, 15)
+n_dims = 8
+
+from scipy.stats import kstest
+
+
+def compute_marginal_alignment(X, Y):
+    n_dims = X.shape[1]
+    total_stat = 0
+    for i in range(n_dims):
+        x1 = X[:, i]
+        x2 = Y[:, i]
+        stat, _ = kstest(x1, x2, method="asymp")
+        weighted_stat = stat * np.sqrt(ase.singular_values_[i])
+        total_stat += weighted_stat
+    return total_stat
+
+
+from hyppo.ksample import KSample
+
+if True:
+
+    for i, reg in enumerate(tqdm(regularizers)):
+        sinkhorn = ot.da.SinkhornTransport(reg_e=reg, tol=1e-8, max_iter=5_000)
+        X_nblast_right_sinkhorn = sinkhorn.fit_transform(
+            Xs=X_nblast_right[:, :n_dims], Xt=X_nblast_left[:, :n_dims]
+        )
+
+        stat, pvalue = KSample("Dcorr").test(
+            X_nblast_left[:, :n_dims], X_nblast_right_sinkhorn[:, :n_dims]
+        )
+
+        X_nblast_sinkhorn = np.concatenate(
+            (X_nblast_left[:, :n_dims], X_nblast_right_sinkhorn[:, :n_dims])
+        )
+        fig, ax = pairplot(
+            X_nblast_sinkhorn[:, :n_dims],
+            labels=side_labels,
+            palette="Set2",
+            hue_order=["left", "right"],
+            s=3,
+            alpha=0.5,
+            title=f"Sinkhorn (reg={reg:.2e}, stat={stat:.3f}, pvalue={pvalue:.2e})",
+        )
+        gluefig(f"sinkhorn-{i}_side_pairplot", fig, formats=["png"])
 
 
 #%%
-# # # # # # # # # # # # # # # # J U N K # # # # # # # # # # # # # # # # # # # # # # # #
-#%%
-sinkhorn = ot.da.SinkhornTransport(reg_e=1e-2, tol=1e-8, max_iter=10000)
-X_nblast_right_sinkhorn = sinkhorn.fit_transform(Xs=X_nblast_right, Xt=X_nblast_left)
-X_nblast_sinkhorn = np.concatenate((X_nblast_left, X_nblast_right_sinkhorn))
 
-pairplot(
-    X_nblast_sinkhorn[:, :n_show],
+reg = 1e-2
+n_dims = 64
+sinkhorn = ot.da.SinkhornTransport(reg_e=reg, tol=1e-8, max_iter=1_000)
+
+X_nblast_right_sinkhorn = sinkhorn.fit_transform(
+    Xs=X_nblast_right[:, :n_dims], Xt=X_nblast_left[:, :n_dims]
+)
+
+marginal_alignment = compute_marginal_alignment(
+    X_nblast_left[:, :n_dims], X_nblast_right_sinkhorn[:, :n_dims]
+)
+
+X_nblast_sinkhorn = np.concatenate(
+    (X_nblast_left[:, :n_dims], X_nblast_right_sinkhorn[:, :n_dims])
+)
+#%%
+fig, ax = pairplot(
+    X_nblast_sinkhorn[:, :8],
     labels=side_labels,
     palette="Set2",
     hue_order=["left", "right"],
     s=3,
     alpha=0.5,
-    title="Sinkhorn",
+    title=f"Sinkhorn (reg={reg:.2e}, marg-align={marginal_alignment:.2f})",
 )
+gluefig(f"sinkhorn-{i}_side_pairplot", fig, formats=["png"])
+
+#%%
+
+
+show_slice = slice(0, 50)
+
+
+matrixplot_kws = dict(
+    row_sort_class=al_left.nodes.iloc[show_slice][score_col],
+    col_sort_class=al_right.nodes.iloc[show_slice][score_col],
+    cmap="Blues",
+    center=None,
+    square=True,
+    col_ticks=False,
+    cbar=False,
+    tick_fontsize=6,
+)
+
+
+def quick_matrixplot(A, ax=None, title=None, **kwargs):
+    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    matrixplot(
+        A[show_slice, show_slice],
+        row_ticks=True,
+        ax=ax,
+        **kwargs,
+        **matrixplot_kws,
+    )
+    ax.set_xlabel("Right neuron")
+    ax.set_ylabel("Left neuron")
+    ax.set_title(title, pad=30)
+    return ax
+
+
+D = sinkhorn.coupling_.T
+
+ax = quick_matrixplot(D)
+# gluefig("noisy_emd_solution", ax.figure)
+
 
 # %%
 
-umap = UMAP(n_components=2, n_neighbors=15, min_dist=0.5)
-Y_nblast = umap.fit_transform(X_nblast)
+i = 7
+reg = regularizers[i]
 
-plot_df = pd.DataFrame(Y_nblast, index=nodes.index, columns=["x", "y"])
-plot_df["side"] = side_labels
-plot_df["cell_class"] = broad_type_labels
-
-
-fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-sns.scatterplot(
-    data=plot_df,
-    x="x",
-    y="y",
-    hue="side",
-    palette="Set2",
-    s=10,
-    alpha=0.5,
+#%%
+n_dims = 64
+reg = 0.007
+sinkhorn = ot.da.SinkhornTransport(reg_e=reg, tol=1e-8, max_iter=5_000)
+X_nblast_right_sinkhorn = sinkhorn.fit_transform(
+    Xs=X_nblast_right[:, :n_dims].copy(), Xt=X_nblast_left[:, :n_dims].copy()
 )
-ax.set(xticks=[], yticks=[])
+X_nblast_sinkhorn = np.concatenate(
+    (X_nblast_left[:, :n_dims].copy(), X_nblast_right_sinkhorn[:, :n_dims].copy())
+)
+fig, ax = pairplot(
+    X_nblast_sinkhorn[:, :8],
+    labels=side_labels,
+    palette="Set2",
+    hue_order=["left", "right"],
+    s=3,
+    alpha=0.5,
+    title=f"Sinkhorn (reg={reg:.2e})",
+)
+# side_pairplot(X_nblast_sinkhorn, title=f"Sinkhorn (reg={reg:.2e})")
+
+#%%
+
+
+#%%
+# # # # # # # # # # # # # # # # J U N K # # # # # # # # # # # # # # # # # # # # # # # #
+#%%
+
+
+# # %%
+
+# umap = UMAP(n_components=2, n_neighbors=15, min_dist=0.5)
+# Y_nblast = umap.fit_transform(X_nblast)
+
+# plot_df = pd.DataFrame(Y_nblast, index=nodes.index, columns=["x", "y"])
+# plot_df["side"] = side_labels
+# plot_df["cell_class"] = broad_type_labels
+
+
+# fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+# sns.scatterplot(
+#     data=plot_df,
+#     x="x",
+#     y="y",
+#     hue="side",
+#     palette="Set2",
+#     s=10,
+#     alpha=0.5,
+# )
+# ax.set(xticks=[], yticks=[])

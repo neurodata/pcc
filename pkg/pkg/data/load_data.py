@@ -8,6 +8,8 @@ import seaborn as sns
 from giskard.graph import MaggotGraph
 from giskard.utils import to_pandas_edgelist
 from sklearn.utils import Bunch
+from neuropull.graph import NetworkFrame
+import polars as pl
 
 version_loc = Path(__file__).parent / "version.txt"
 with open(version_loc) as f:
@@ -185,3 +187,103 @@ def load_data(graph_type, base_path=None, version=None):
         graph.add_node(node)
 
     return Bunch(graph=graph, adj=adj, meta=meta)
+
+
+def load_flywire_networkframe():
+    data_dir = DATA_PATH / "hackathon"
+
+    dataset = "fafb_flywire"
+    dataset_dir = data_dir / dataset
+
+    nodes = pd.read_csv(dataset_dir / f"{dataset}_meta.csv", low_memory=False)
+    nodes.drop("row_id", axis=1, inplace=True)
+    nodes.rename(columns={"root_id": "node_id"}, inplace=True)
+
+    # NOTE:
+    # some nodes have multiple rows in the table
+    # strategy here is to keep the first row that has a hemibrain type, though that
+    # could be changed
+    node_counts = nodes.value_counts("node_id")  # noqa: F841
+    dup_nodes = nodes.query(
+        "node_id.isin(@node_counts[@node_counts > 1].index)"
+    ).sort_values("node_id")
+    keep_rows = (
+        dup_nodes.sort_values("hemibrain_type")
+        .drop_duplicates("node_id", keep="first")
+        .index
+    )
+    drop_rows = dup_nodes.index.difference(keep_rows)
+    nodes.drop(drop_rows, inplace=True)
+
+    nodes["cell_type_filled"] = nodes["cell_type"].fillna(nodes["hemibrain_type"])
+
+    nodes.set_index("node_id", inplace=True)
+
+    edges = pd.read_feather(dataset_dir / f"{dataset}_edges.feather")
+    edges.rename(
+        columns={
+            "pre_pt_root_id": "source",
+            "post_pt_root_id": "target",
+            "syn_count": "weight",
+            "neuropil": "region",
+        },
+        inplace=True,
+    )
+
+    # NOTE: there are some edges that reference nodes that are not in the node table
+    referenced_node_ids = np.union1d(edges["source"].unique(), edges["target"].unique())
+    isin_node_table = np.isin(referenced_node_ids, nodes.index)
+    missing_node_ids = referenced_node_ids[~isin_node_table]  # noqa: F841
+
+    edges.query(
+        "~((source in @missing_node_ids) or (target in @missing_node_ids))",
+        inplace=True,
+    )
+
+    flywire = NetworkFrame(nodes.copy(), edges.copy())
+    return flywire
+
+
+def load_flywire_nblast_subset(queries=None):
+    data_dir = DATA_PATH / "hackathon"
+
+    nblast = pl.scan_ipc(
+        data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather",
+        memory_map=False,
+    )
+    index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
+    columns = pd.Index(nblast.columns[1:])
+    index_ids = index.str.split(",", expand=True).get_level_values(0).astype(int)
+    column_ids = columns.str.split(",", expand=True).get_level_values(0).astype(int)
+    index_ids_map = dict(zip(index_ids, index))
+    column_ids_map = dict(zip(column_ids, columns))
+    index_ids_reverse_map = dict(zip(index, index_ids))
+    column_ids_reverse_map = dict(zip(columns, column_ids))
+
+    if queries is None:
+        query_node_ids = index
+    elif not isinstance(queries, tuple):
+        query_node_ids = queries
+    else:
+        query_node_ids = np.concatenate(queries)
+
+    query_index = pd.Series([index_ids_map[i] for i in query_node_ids])
+    query_columns = pd.Series(["index"] + [column_ids_map[i] for i in query_node_ids])
+
+    nblast = nblast.with_columns(
+        pl.col("index").is_in(query_index).alias("select_index")
+    )
+
+    mini_nblast = (
+        nblast.filter(pl.col("select_index"))
+        .select(query_columns)
+        .collect()
+        .to_pandas()
+    ).set_index("index")
+
+    mini_nblast.index = mini_nblast.index.map(index_ids_reverse_map)
+    mini_nblast.columns = mini_nblast.columns.map(column_ids_reverse_map)
+
+    mini_nblast = mini_nblast.loc[query_node_ids, query_node_ids]
+
+    return mini_nblast
