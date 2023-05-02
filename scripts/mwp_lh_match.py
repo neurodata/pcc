@@ -44,6 +44,8 @@ graph_match_kws = dict(
     shuffle_input=True,
     n_jobs=-2,
     n_init=n_init,
+    init_perturbation=0,
+    verbose=3,
     rng=8888,
 )
 
@@ -51,8 +53,6 @@ currtime = time.time()
 indices_left, indices_right, score, misc = graph_match(
     left_adj.values,
     right_adj.values,
-    init_perturbation=0,
-    verbose=3,
     **graph_match_kws,
 )
 print(
