@@ -1,124 +1,86 @@
 #%%
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
-import ot
 import pandas as pd
-import polars as pl
-import seaborn as sns
-from pkg.data import DATA_PATH, load_flywire_networkframe
+from pkg.data import DATA_PATH
 from pkg.io import OUT_PATH
-from pkg.io import glue as default_glue
-from pkg.io import savefig
-from scipy.optimize import linear_sum_assignment
-from tqdm.autonotebook import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
 
 from graspologic.match import graph_match
 
 
-DISPLAY_FIGS = True
-FILENAME = "al_match"
-
-data_dir = DATA_PATH / "hackathon"
-
-
-def glue(name, var, **kwargs):
-    default_glue(name, var, FILENAME, **kwargs)
-
-
-def gluefig(name, fig, **kwargs):
-    savefig(name, foldername=FILENAME, **kwargs)
-
-    glue(name, fig, figure=True)
-
-    if not DISPLAY_FIGS:
-        plt.close()
-
+FILENAME = "mwp_lh_match"
+data_dir = DATA_PATH / "hackathon" / "mwp_lh"
 
 # %%
 
 
-def load_flywire_nblast_subset(queries):
-    data_dir = DATA_PATH / "hackathon"
-
-    nblast = pl.scan_ipc(
-        data_dir / "nblast" / "nblast_flywire_all_right_aba_comp.feather",
-        memory_map=False,
+def load_adjacency(side):
+    if side == "left":
+        token = "LHS"
+    elif side == "right":
+        token = "RHS"
+    left_adj = pd.read_csv(data_dir / f"{token}_LH_adjx.csv", index_col=0)
+    non_dupe_cols = (
+        left_adj.columns.str.split(".", expand=True).get_level_values(0).unique()
     )
-    index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
-    columns = pd.Index(nblast.columns[1:])
-    index_ids = index.str.split(",", expand=True).get_level_values(0).astype(int)
-    column_ids = columns.str.split(",", expand=True).get_level_values(0).astype(int)
-    index_ids_map = dict(zip(index_ids, index))
-    column_ids_map = dict(zip(column_ids, columns))
-    index_ids_reverse_map = dict(zip(index, index_ids))
-    column_ids_reverse_map = dict(zip(columns, column_ids))
-
-    query_node_ids = np.concatenate(queries)
-    query_index = pd.Series([index_ids_map[i] for i in query_node_ids])
-    query_columns = pd.Series(["index"] + [column_ids_map[i] for i in query_node_ids])
-
-    nblast = nblast.with_columns(
-        pl.col("index").is_in(query_index).alias("select_index")
-    )
-
-    mini_nblast = (
-        nblast.filter(pl.col("select_index"))
-        .select(query_columns)
-        .collect()
-        .to_pandas()
-    ).set_index("index")
-
-    mini_nblast.index = mini_nblast.index.map(index_ids_reverse_map)
-    mini_nblast.columns = mini_nblast.columns.map(column_ids_reverse_map)
-
-    mini_nblast = mini_nblast.loc[query_node_ids, query_node_ids]
-
-    return mini_nblast
+    left_adj = left_adj[non_dupe_cols]
+    left_adj.columns = left_adj.columns.astype(int)
+    left_adj = left_adj[~left_adj.index.duplicated(keep="first")]
+    left_adj = left_adj.loc[left_adj.columns]
+    return left_adj
 
 
-def select_al(flywire):
-    al_types = [
-        "ALPN",
-        "olfactory",
-        "thermosensory",
-        "hygrosensory",
-        "ALLN",
-        "ALON",
-        "ALIN",
-    ]
-    al = flywire.query_nodes(f"cell_class.isin({al_types})").copy()
-    return al
-
-
-score_col = "cell_type_filled"
-
-flywire = load_flywire_networkframe()
-al = select_al(flywire)
-al.nodes.sort_values(score_col, inplace=True)
-
-
-
-#%%
-al_left = al.query_nodes("side == 'left'").copy()
-al_right = al.query_nodes("side == 'right'").copy()
+left_adj = load_adjacency("left")
+right_adj = load_adjacency("right")
 
 #%%
 
-nodes = pd.concat((al_left.nodes, al_right.nodes))
-side_labels = nodes["side"]
-broad_type_labels = nodes["cell_class"]
-fine_type_labels = nodes["cell_type_filled"].fillna("unknown")
+n_init = 20
 
-side_palette = dict(zip(["left", "right"], sns.color_palette("Set2", 2)))
-broad_class_palette = dict(zip(broad_type_labels.unique(), sns.color_palette("tab10")))
+graph_match_kws = dict(
+    max_iter=20,
+    shuffle_input=True,
+    n_jobs=-2,
+    n_init=n_init,
+    rng=8888,
+)
+
+currtime = time.time()
+indices_left, indices_right, score, misc = graph_match(
+    left_adj.values,
+    right_adj.values,
+    init_perturbation=0,
+    verbose=3,
+    **graph_match_kws,
+)
+print(
+    f"{time.time() - currtime:.3f} seconds elapsed for {n_init} runs of graph matching."
+)
+
 
 #%%
-nblast = load_flywire_nblast_subset((al_left.nodes.index, al_right.nodes.index))
+index_left = left_adj.index[indices_left]
+index_right = right_adj.index[indices_right]
+left_adj_perm = left_adj.loc[index_left, index_left]
+right_adj_perm = right_adj.loc[index_right, index_right]
 
-nblast_within_left = nblast.loc[al_left.nodes.index, al_left.nodes.index].values
-nblast_within_right = nblast.loc[al_right.nodes.index, al_right.nodes.index].values
-nblast_between = nblast.loc[al_left.nodes.index, al_right.nodes.index].values
-adjacency_left = al_left.to_adjacency().values.astype(float)
-adjacency_right = al_right.to_adjacency().values.astype(float)
+#%%
+pair_df = pd.DataFrame()
+pair_df["left_id"] = index_left
+pair_df["right_id"] = index_right
+
+out_cos_sims = np.diag(cosine_similarity(left_adj_perm, right_adj_perm))
+pair_df["out_cos_sim"] = out_cos_sims
+
+in_cos_sims = np.diag(cosine_similarity(left_adj_perm.T, right_adj_perm.T))
+pair_df["in_cos_sim"] = in_cos_sims
+
+pair_df["cos_sim"] = (pair_df["out_cos_sim"] + pair_df["in_cos_sim"]) / 2
+
+pair_df.sort_values("cos_sim", ascending=False, inplace=True)
+pair_df
+
+#%%
+pair_df.to_csv(OUT_PATH / FILENAME / "mwp_lh_match.csv", index=False)
