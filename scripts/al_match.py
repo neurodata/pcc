@@ -7,24 +7,15 @@ import ot
 import pandas as pd
 import polars as pl
 import seaborn as sns
-from pkg.data import DATA_PATH
+from pkg.data import DATA_PATH, load_flywire_networkframe
 from pkg.io import OUT_PATH
 from pkg.io import glue as default_glue
 from pkg.io import savefig
 from scipy.optimize import linear_sum_assignment
 from tqdm.autonotebook import tqdm
 
-from giskard.plot import confusionplot, matrixplot
 from graspologic.match import graph_match
-from neuropull.graph import NetworkFrame
-from scipy.cluster.hierarchy import linkage
-from scipy.spatial.distance import squareform
-from graspologic.embed import AdjacencySpectralEmbed
-from giskard.plot import pairplot
-from umap import UMAP
-import seaborn as sns
 
-import ot
 
 DISPLAY_FIGS = True
 FILENAME = "al_match"
@@ -46,61 +37,6 @@ def gluefig(name, fig, **kwargs):
 
 
 # %%
-
-
-def load_flywire_networkframe():
-    data_dir = DATA_PATH / "hackathon"
-
-    dataset = "fafb_flywire"
-    dataset_dir = data_dir / dataset
-
-    nodes = pd.read_csv(dataset_dir / f"{dataset}_meta.csv", low_memory=False)
-    nodes.drop("row_id", axis=1, inplace=True)
-    nodes.rename(columns={"root_id": "node_id"}, inplace=True)
-
-    # NOTE:
-    # some nodes have multiple rows in the table
-    # strategy here is to keep the first row that has a hemibrain type, though that
-    # could be changed
-    node_counts = nodes.value_counts("node_id")  # noqa: F841
-    dup_nodes = nodes.query(
-        "node_id.isin(@node_counts[@node_counts > 1].index)"
-    ).sort_values("node_id")
-    keep_rows = (
-        dup_nodes.sort_values("hemibrain_type")
-        .drop_duplicates("node_id", keep="first")
-        .index
-    )
-    drop_rows = dup_nodes.index.difference(keep_rows)
-    nodes.drop(drop_rows, inplace=True)
-
-    nodes["cell_type_filled"] = nodes["cell_type"].fillna(nodes["hemibrain_type"])
-
-    nodes.set_index("node_id", inplace=True)
-
-    edges = pd.read_feather(dataset_dir / f"{dataset}_edges.feather")
-    edges.rename(
-        columns={
-            "pre_pt_root_id": "source",
-            "post_pt_root_id": "target",
-            "syn_count": "weight",
-            "neuropil": "region",
-        },
-        inplace=True,
-    )
-
-    # NOTE: there are some edges that reference nodes that are not in the node table
-    referenced_node_ids = np.union1d(edges["source"].unique(), edges["target"].unique())
-    isin_node_table = np.isin(referenced_node_ids, nodes.index)
-    missing_node_ids = referenced_node_ids[~isin_node_table]  # noqa: F841
-
-    edges.query(
-        "~((source in @missing_node_ids) or (target in @missing_node_ids))",
-        inplace=True,
-    )
-
-    flywire = NetworkFrame(nodes.copy(), edges.copy())
-    return flywire
 
 
 def load_flywire_nblast_subset(queries):
@@ -152,7 +88,7 @@ def select_al(flywire):
         "ALON",
         "ALIN",
     ]
-    al = flywire.query_nodes(f"cell_class.isin({al_types})")
+    al = flywire.query_nodes(f"cell_class.isin({al_types})").copy()
     return al
 
 
@@ -160,10 +96,22 @@ score_col = "cell_type_filled"
 
 flywire = load_flywire_networkframe()
 al = select_al(flywire)
+al.nodes.sort_values(score_col, inplace=True)
+
+#%%
+gold = pd.read_csv(DATA_PATH / "hackathon/al/AL_gold_standard_labels.csv")
+gold["stable"] = gold["stable"] == "y"
+is_gold = gold[gold["stable"]].set_index("label").index
+
+al.nodes["is_gold"] = al.nodes[score_col].isin(is_gold)
+
+print(
+    f"Proportion of neurons with gold labels: {al.nodes['is_gold'].mean():.2f}",
+)
+
+#%%
 al_left = al.query_nodes("side == 'left'").copy()
 al_right = al.query_nodes("side == 'right'").copy()
-al_left.nodes.sort_values(score_col, inplace=True)
-al_right.nodes.sort_values(score_col, inplace=True)
 
 #%%
 
@@ -184,8 +132,6 @@ nblast_between = nblast.loc[al_left.nodes.index, al_right.nodes.index].values
 adjacency_left = al_left.to_adjacency().values.astype(float)
 adjacency_right = al_right.to_adjacency().values.astype(float)
 
-
-#%%
 #%%
 # rescaling everything...
 
@@ -242,6 +188,63 @@ row_inds, col_inds = linear_sum_assignment(co_label_mat, maximize=True)
 print("Oracle accuracy:")
 print(co_label_mat[row_inds, col_inds].mean())
 
+#%%
+is_same_label = (
+    al_left.nodes[score_col].values[:, None]
+    == al_right.nodes[score_col].values[None, :]
+)
+
+is_gold = (
+    al_left.nodes["is_gold"].values[:, None]
+    == al_right.nodes["is_gold"].values[None, :]
+)
+is_gold_label = is_gold & is_same_label
+is_gold_label
+
+#%%
+labels_left = al_left.nodes.query("is_gold")[score_col].values
+labels_right = al_right.nodes.query("is_gold")[score_col].values
+co_label_mat = labels_left[:, None] == labels_right[None, :]
+row_inds, col_inds = linear_sum_assignment(co_label_mat, maximize=True)
+
+print("Oracle gold accuracy:")
+print(co_label_mat[row_inds, col_inds].mean())
+
+#%%
+currtime = time.time()
+indices1, indices2, score, misc = graph_match(
+    adjacency_left_scaled,
+    adjacency_right_scaled,
+    S=nblast_between_scaled + 100 * is_gold_label,
+    init="similarity",
+    solver="lap",
+    shuffle_input=False,
+)
+print("Converged: ", misc[0]["converged"])
+print(f"{time.time() - currtime:.3f} seconds elapsed.")
+
+type_col = "cell_type_filled"
+matched_nodes = create_matched_nodes(indices1, indices2)
+colabeling = matched_nodes[[f"{score_col}_left", f"{score_col}_right"]].dropna()
+acc = np.mean(colabeling[f"{score_col}_left"] == colabeling[f"{score_col}_right"])
+gold_colabeling = matched_nodes.query("is_gold_left | is_gold_right")[
+    [f"{score_col}_left", f"{score_col}_right"]
+].dropna()
+gold_acc = np.mean(
+    gold_colabeling[f"{score_col}_left"] == gold_colabeling[f"{score_col}_right"]
+)
+conn_score, nblast_between_score = compute_scores(indices1, indices2)
+
+print(f"Accuracy: {acc:.3f}")
+print(f"Gold accuracy: {gold_acc:.3f}")
+print(f"Connectivity score: {conn_score:.3f}")
+print(f"NBLAST score: {nblast_between_score:.3f}")
+
+#%%
+
+matched_nodes[["node_id_left", "node_id_right"]].to_csv(
+    "al_match_with_gold_soft_seeds.csv"
+)
 
 #%%
 currtime = time.time()
