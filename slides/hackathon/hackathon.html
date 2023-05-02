@@ -367,15 +367,38 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#benjamin-d-pedigo">Benjamin D. Pedigo</a></li>
 </ul>
 </li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#cell-types">Cell types</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#cell-types-and-distribution-shift">Cell types and “distribution shift”</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#matters-for-both-inductive-and-de-novo-cell-typing">Matters for both “inductive” and “de novo” cell typing</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#antennal-lobe-as-a-test-case">Antennal lobe as a test case</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#graph-matching">Graph matching</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#cosine-similarity">Cosine similarity</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#but-implicitly">But implicitly…</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#optimal-transport">Optimal transport</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#earth-mover-s-distance">Earth mover’s distance</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#nblast-clustering-suggests-this-could-be-happening">NBLAST clustering suggests this could be happening</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#nblast-embedding">NBLAST embedding</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#how-to-line-things-up-based-on-nblast">How to line things up, based on NBLAST?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#linear-assignment-problem">Linear assignment problem</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intuition">Intuition:</a></li>
 </ul>
 </li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#optimal-transport-on-nblast-alone">Optimal transport on NBLAST alone</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#issue-with-a-hard-matching">Issue with a “hard” matching?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Issue with a “hard” matching?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#smoother-matchings">Smoother matchings</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#regularized-optimal-transport">Regularized optimal transport</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">Intuition</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#benefit-hopefully-of-a-smoother-matching">Benefit (hopefully) of a smoother matching</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Benefit (hopefully) of a smoother matching</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#what-if-we-want-to-include-connectivity">What if we want to include connectivity?</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cosine-similarity">Cosine similarity:</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#graph-matching">Graph matching</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#accuracy-on-known-labels">Accuracy on known labels</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#connectivity-score-low-is-good">Connectivity score (low is good)</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#nblast-score-high-is-good">NBLAST score (high is good)</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#can-we-tell-when-we-re-wrong">Can we tell when we’re wrong?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Can we tell when we’re wrong?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#todos">TODOs</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#appendix">Appendix</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#using-this-rough-assignment-to-induce-a-matching-for-connectivity">Using this rough assignment to induce a matching for connectivity</a></li>
 </ul>
 
@@ -406,71 +429,268 @@ document.write(`
 </section>
 </section>
 <hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="cell-types">
+<h1>Cell types<a class="headerlink" href="#cell-types" title="Permalink to this heading">#</a></h1>
+<p><img alt="center h:500" src="../../_images/cell-types-1.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="cell-types-and-distribution-shift">
+<h1>Cell types and “distribution shift”<a class="headerlink" href="#cell-types-and-distribution-shift" title="Permalink to this heading">#</a></h1>
+<p><img alt="center h:500" src="../../_images/cell-types-2.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="matters-for-both-inductive-and-de-novo-cell-typing">
+<h1>Matters for both “inductive” and “de novo” cell typing<a class="headerlink" href="#matters-for-both-inductive-and-de-novo-cell-typing" title="Permalink to this heading">#</a></h1>
+<ul class="simple">
+<li><p>E.g. mapping labels from one dataset onto another via a matching, or</p></li>
+<li><p>Creating new labels by clustering on a unified representation of datasets</p></li>
+</ul>
+</section>
+<hr class="docutils" />
 <section class="tex2jax_ignore mathjax_ignore" id="antennal-lobe-as-a-test-case">
 <h1>Antennal lobe as a test case<a class="headerlink" href="#antennal-lobe-as-a-test-case" title="Permalink to this heading">#</a></h1>
+<ul class="simple">
+<li><p>Using FlyWire data</p></li>
+<li><p>Trying to match left/right</p></li>
+<li><p>~1750 neurons per side</p></li>
+<li><p>Has good labels to use for evaluation</p></li>
+</ul>
 </section>
 <hr class="docutils" />
-<section class="tex2jax_ignore mathjax_ignore" id="graph-matching">
-<h1>Graph matching<a class="headerlink" href="#graph-matching" title="Permalink to this heading">#</a></h1>
-<div class="math notranslate nohighlight">
-\[\min_P \|A - P B P^T\|_F^2\]</div>
-<p>equivalent to</p>
-<div class="math notranslate nohighlight">
-\[\min_P -trace(A^TPBP^T)\]</div>
-<p>what is this thing?</p>
+<section class="tex2jax_ignore mathjax_ignore" id="nblast-clustering-suggests-this-could-be-happening">
+<h1>NBLAST clustering suggests this could be happening<a class="headerlink" href="#nblast-clustering-suggests-this-could-be-happening" title="Permalink to this heading">#</a></h1>
+<div class="columns">
+<div>
+<p><img alt="" src="../../_images/side-legend.png" /></p>
+</div>
+<div>
+<p><img alt="" src="../../_images/cell-type-legend.png" /></p>
+</div>
+</div>
+<p><img alt="bg right h:625" src="../results/figs/nblast_embed/no_embed_clustermap.png" /></p>
 </section>
 <hr class="docutils" />
-<section class="tex2jax_ignore mathjax_ignore" id="cosine-similarity">
-<h1>Cosine similarity<a class="headerlink" href="#cosine-similarity" title="Permalink to this heading">#</a></h1>
+<section class="tex2jax_ignore mathjax_ignore" id="nblast-embedding">
+<h1>NBLAST embedding<a class="headerlink" href="#nblast-embedding" title="Permalink to this heading">#</a></h1>
+<p><img alt="bg right h:625" src="../results/figs/nblast_embed/raw_side_pairplot.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="how-to-line-things-up-based-on-nblast">
+<h1>How to line things up, based on NBLAST?<a class="headerlink" href="#how-to-line-things-up-based-on-nblast" title="Permalink to this heading">#</a></h1>
+<p>Say we have sets of objects <span class="math notranslate nohighlight">\(I = \{i : i=1,...,n\}\)</span> and <span class="math notranslate nohighlight">\(J = \{j : j=1,...,m\}\)</span></p>
+<p>For example, <span class="math notranslate nohighlight">\(I\)</span> is the set of neurons on the left, <span class="math notranslate nohighlight">\(J\)</span> those on the right.</p>
+<p>Say <span class="math notranslate nohighlight">\(S\)</span> is a <span class="math notranslate nohighlight">\(n \times m\)</span> matrix such that <span class="math notranslate nohighlight">\(S_{ij}\)</span> has the NBLAST score between neuron <span class="math notranslate nohighlight">\(i\)</span> (left) and neuron <span class="math notranslate nohighlight">\(j\)</span> (right)</p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="linear-assignment-problem">
+<h1>Linear assignment problem<a class="headerlink" href="#linear-assignment-problem" title="Permalink to this heading">#</a></h1>
+<div class="math notranslate nohighlight">
+\[\max_{P} trace(S P^T) = \max_{P} \sum_{ij} S_{ij} P_{ij} \]</div>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(P\)</span> is a permutation matrix.</p></li>
+<li><p><span class="math notranslate nohighlight">\(P_{ij}\)</span> is 1 if <span class="math notranslate nohighlight">\(i \leftrightarrow j\)</span>, 0 otherwise.</p></li>
+</ul>
+<section id="intuition">
+<h2>Intuition:<a class="headerlink" href="#intuition" title="Permalink to this heading">#</a></h2>
+<p>Maximize the total NBLAST scores of neurons which are matched, over the set of all matchings.</p>
+<p><span class="math notranslate nohighlight">\(P^T\)</span> reshuffles the columns of <span class="math notranslate nohighlight">\(S\)</span> to make the diagonal big</p>
+<hr class="docutils" />
+<div class="columns">
+<div>
+<p><img alt="" src="../results/figs/transport/nblast.png" /></p>
+</div>
+<div>
+<p><img alt="" src="../results/figs/transport/lap_solution.png" /></p>
+</div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="issue-with-a-hard-matching">
+<h1>Issue with a “hard” matching?<a class="headerlink" href="#issue-with-a-hard-matching" title="Permalink to this heading">#</a></h1>
+<p><img alt="center h:500" src="../../_images/cell-types-3.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="id1">
+<h1>Issue with a “hard” matching?<a class="headerlink" href="#id1" title="Permalink to this heading">#</a></h1>
+<p><img alt="center h:500" src="../../_images/cell-types-4.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="smoother-matchings">
+<h1>Smoother matchings<a class="headerlink" href="#smoother-matchings" title="Permalink to this heading">#</a></h1>
+<p>Or, how stable are these matchings?</p>
+<ul class="simple">
+<li><p>Add i.i.d. Gaussian noise to NBLAST matrix, <span class="math notranslate nohighlight">\(\tilde{S}_{ij} = S_{ij} + Normal(0, 0.05)\)</span></p></li>
+<li><p>Run linear assignment problem, get <span class="math notranslate nohighlight">\(P^*\)</span></p></li>
+<li><p>Take the average of 100 runs of the above.</p></li>
+</ul>
+<hr class="docutils" />
+<div class="columns">
+<div>
+<p><img alt="" src="../results/figs/transport/nblast.png" /></p>
+</div>
+<div>
+<p><img alt="" src="../results/figs/transport/noisy_emd_solution.png" /></p>
+</div>
+</div>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="regularized-optimal-transport">
+<h1>Regularized optimal transport<a class="headerlink" href="#regularized-optimal-transport" title="Permalink to this heading">#</a></h1>
+<div class="math notranslate nohighlight">
+\[\max_{D} trace(S D^T) + \lambda \Omega(D)\]</div>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(D\)</span> is a transportation matrix, i.e. rows/columns sum to 1, and <span class="math notranslate nohighlight">\(D_{ij}\)</span> represents the amount of “flow” or matching weight from <span class="math notranslate nohighlight">\(i\)</span> to <span class="math notranslate nohighlight">\(j\)</span>.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\Omega(D)\)</span> is a regularizer which promotes “smooth” solutions (i.e. not 0-1),</p></li>
+<li><p>and <span class="math notranslate nohighlight">\(\lambda\)</span> is a weight on the regularization.</p></li>
+</ul>
+<section id="id2">
+<h2>Intuition<a class="headerlink" href="#id2" title="Permalink to this heading">#</a></h2>
+<p>Maximize the NBLAST scores of soft-matched neurons, weighted by how strongly those neurons are matched, over the set of (somewhat smooth) soft matchings</p>
+<hr class="docutils" />
+<div class="columns">
+<div>
+<p><img alt="" src="../results/figs/transport/nblast.png" /></p>
+</div>
+<div>
+<p><img alt="" src="../results/figs/transport/sinkhorn_solution.png" /></p>
+</div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="benefit-hopefully-of-a-smoother-matching">
+<h1>Benefit (hopefully) of a smoother matching<a class="headerlink" href="#benefit-hopefully-of-a-smoother-matching" title="Permalink to this heading">#</a></h1>
+<p><img alt="center h:500" src="../../_images/cell-types-5.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="id3">
+<h1>Benefit (hopefully) of a smoother matching<a class="headerlink" href="#id3" title="Permalink to this heading">#</a></h1>
+<p><img alt="center h:500" src="../../_images/cell-types-6.png" /></p>
+<!-- ---
+
+
+# Optimal transport
+
+## Earth mover's distance
+
+
+The "cost" of moving a unit of mass from $i$ to $j$ is given by $d_{ij}$.
+
+We seek a set of "flows" $f_{ij}$ which minimizes the overall cost 
+
+$$\min_F \sum_{ij} f_{ij} d_{ij} = trace(F^TD)$$ -->
+<!-- If $D_{ij}$ is the NBLAST cost of matching $i$ and $j$... -->
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/transport/composite_view_2.png" /></p>
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/transport/composite_view_3.png" /></p>
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/transport/composite_view_4.png" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="what-if-we-want-to-include-connectivity">
+<h1>What if we want to include connectivity?<a class="headerlink" href="#what-if-we-want-to-include-connectivity" title="Permalink to this heading">#</a></h1>
+<section id="cosine-similarity">
+<h2>Cosine similarity:<a class="headerlink" href="#cosine-similarity" title="Permalink to this heading">#</a></h2>
 <p>for two vectors, <span class="math notranslate nohighlight">\(a\)</span> and <span class="math notranslate nohighlight">\(b\)</span>…</p>
 <div class="math notranslate nohighlight">
 \[cos(a,b) = \frac{&lt;a, b&gt;}{\|a\| \|b\|} = \frac{a^T b}{\|a\| \|b\|}\]</div>
 <p>if we have a bunch of vectors stored in the matrices <span class="math notranslate nohighlight">\(A\)</span> and <span class="math notranslate nohighlight">\(B\)</span>, then</p>
 <div class="math notranslate nohighlight">
-\[D = A^T B\]</div>
-<p>since <span class="math notranslate nohighlight">\(D_{ij} = \sum_k a_{ki} b_{kj}\)</span></p>
+\[C = A^T B\]</div>
+<p>since <span class="math notranslate nohighlight">\(C_{ij} = \sum_k a_{ki} b_{kj}\)</span></p>
+</section>
 </section>
 <hr class="docutils" />
-<section class="tex2jax_ignore mathjax_ignore" id="but-implicitly">
-<h1>But implicitly…<a class="headerlink" href="#but-implicitly" title="Permalink to this heading">#</a></h1>
+<section class="tex2jax_ignore mathjax_ignore" id="graph-matching">
+<h1>Graph matching<a class="headerlink" href="#graph-matching" title="Permalink to this heading">#</a></h1>
 <div class="math notranslate nohighlight">
 \[ C = A^T I B \]</div>
-<p>where <span class="math notranslate nohighlight">\(I\)</span> is the identity matrix</p>
+<p>where <span class="math notranslate nohighlight">\(I\)</span> is the identity matrix - this represents a belief about the permutation of rows of <span class="math notranslate nohighlight">\(B\)</span> with respect to <span class="math notranslate nohighlight">\(A\)</span>… so more generally, could write:</p>
+<div class="math notranslate nohighlight">
+\[C = A^T P B\]</div>
+<p>Much like before, if we want to measure the “matchedness”</p>
+<div class="math notranslate nohighlight">
+\[\max_P trace(CP^T) = trace(A^TPBP^T)\]</div>
+<p>Can show this is equivalent to:</p>
+<div class="math notranslate nohighlight">
+\[\min_P \|A - PBP^T\|_F\]</div>
+</section>
 <hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="accuracy-on-known-labels">
+<h1>Accuracy on known labels<a class="headerlink" href="#accuracy-on-known-labels" title="Permalink to this heading">#</a></h1>
 <p><img alt="center" src="../results/figs/al_explore/al_accuracy.svg" /></p>
+</section>
 <hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="connectivity-score-low-is-good">
+<h1>Connectivity score (low is good)<a class="headerlink" href="#connectivity-score-low-is-good" title="Permalink to this heading">#</a></h1>
 <p><img alt="center" src="../results/figs/al_explore/conn_score.svg" /></p>
+</section>
 <hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="nblast-score-high-is-good">
+<h1>NBLAST score (high is good)<a class="headerlink" href="#nblast-score-high-is-good" title="Permalink to this heading">#</a></h1>
 <p><img alt="center" src="../results/figs/al_explore/nblast_between_score.svg" /></p>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="can-we-tell-when-we-re-wrong">
+<h1>Can we tell when we’re wrong?<a class="headerlink" href="#can-we-tell-when-we-re-wrong" title="Permalink to this heading">#</a></h1>
+<div class="columns">
+<div>
+<p><img alt="center h:500" src="../results/figs/al_explore_redo/post-hoc-metrics-nblast-between-only.svg" /></p>
+</div>
+<div>
+<p><img alt="center h:500" src="../results/figs/al_explore_redo/post-hoc-metrics-nblast-between-connectivity.svg" /></p>
+</div>
+</div>
+</section>
+<hr class="docutils" />
+<section class="tex2jax_ignore mathjax_ignore" id="id4">
+<h1>Can we tell when we’re wrong?<a class="headerlink" href="#id4" title="Permalink to this heading">#</a></h1>
+<p>For optimal transport on NBLAST, and grouping by label on the left side:</p>
+<div class="columns">
+<div>
+<p><img alt="center h:500" src="../results/figs/al_explore_redo/sinkhorn_prop_vs_conf.svg" /></p>
+</div>
+<div>
+<p><img alt="center h:500" src="../results/figs/al_explore_redo/sinkhorn_acc_vs_conf.svg" /></p>
+</div>
+</div>
 <hr class="docutils" />
 <div class="columns">
 <div>
-<p><img alt="center h:600" src="../results/figs/al_explore/post-hoc-metrics-nblast-between-only.svg" /></p>
+<p><img alt="center" src="../results/figs/nblast_embed/emd_side_pairplot.png" /></p>
 </div>
 <div>
-<p><img alt="center h:600" src="../results/figs/al_explore/post-hoc-metrics-nblast-between-connectivity.svg" /></p>
+<p><img alt="center" src="../results/figs/nblast_embed/emd_class_pairplot.png" /></p>
 </div>
 </div>
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/nblast_embed/emd_side_scatter.png" /></p>
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/nblast_embed/emd_clustermap.png" /></p>
 </section>
 <hr class="docutils" />
-<section class="tex2jax_ignore mathjax_ignore" id="optimal-transport">
-<h1>Optimal transport<a class="headerlink" href="#optimal-transport" title="Permalink to this heading">#</a></h1>
-<section id="earth-mover-s-distance">
-<h2>Earth mover’s distance<a class="headerlink" href="#earth-mover-s-distance" title="Permalink to this heading">#</a></h2>
-<p>Say we have sets of objects <span class="math notranslate nohighlight">\(I = \{i : i=1,...,n\}\)</span> and <span class="math notranslate nohighlight">\(J = \{j : j=1,...,m\}\)</span></p>
-<p>The “cost” of moving a unit of mass from <span class="math notranslate nohighlight">\(i\)</span> to <span class="math notranslate nohighlight">\(j\)</span> is given by <span class="math notranslate nohighlight">\(d_{ij}\)</span>.</p>
-<p>We seek a set of “flows” <span class="math notranslate nohighlight">\(f_{ij}\)</span> which minimizes the overall cost</p>
-<div class="math notranslate nohighlight">
-\[\min_F \sum_{ij} f_{ij} d_{ij} = trace(F^TD)\]</div>
-<p>Turns out to be a sub-problem of graph matching</p>
-<p>If <span class="math notranslate nohighlight">\(D_{ij}\)</span> is the NBLAST cost of matching <span class="math notranslate nohighlight">\(i\)</span> and <span class="math notranslate nohighlight">\(j\)</span>…</p>
-</section>
+<section class="tex2jax_ignore mathjax_ignore" id="todos">
+<h1>TODOs<a class="headerlink" href="#todos" title="Permalink to this heading">#</a></h1>
+<ul class="simple">
+<li><p>Generalizing to more than 2 datasets at a time</p></li>
+<li><p>Scaling experiments</p>
+<ul>
+<li><p>Optimal transport runs on central brain in ~minutes (on laptop)</p></li>
+<li><p>Need to see whether graph matching can scale to that size</p></li>
+</ul>
+</li>
+<li><p>Seeds/soft seeds?</p>
+<ul>
+<li><p>Using pre-known matchings in the optimization</p></li>
+</ul>
+</li>
+</ul>
 </section>
 <hr class="docutils" />
-<section class="tex2jax_ignore mathjax_ignore" id="optimal-transport-on-nblast-alone">
-<h1>Optimal transport on NBLAST alone<a class="headerlink" href="#optimal-transport-on-nblast-alone" title="Permalink to this heading">#</a></h1>
-<p><img alt="" src="../results/figs/al_explore/nblast-noisy-transport-compare.png" /></p>
-<p>Right is sum of 100 solutions using <span class="math notranslate nohighlight">\(D + Normal(0, 0.05)\)</span> (iid) as the cost</p>
+<section class="tex2jax_ignore mathjax_ignore" id="appendix">
+<h1>Appendix<a class="headerlink" href="#appendix" title="Permalink to this heading">#</a></h1>
 </section>
 <hr class="docutils" />
 <section class="tex2jax_ignore mathjax_ignore" id="using-this-rough-assignment-to-induce-a-matching-for-connectivity">
@@ -480,6 +700,19 @@ document.write(`
 <p>where <span class="math notranslate nohighlight">\(F\)</span> is the transportation solution we found above, which roughly maps neurons together based on their NBLAST similarity</p>
 <hr class="docutils" />
 <p><img alt="" src="../results/figs/al_explore/1-step-cost-comparison-v2.png" /></p>
+<hr class="docutils" />
+<div class="columns">
+<div>
+<p><img alt="center" src="../results/figs/nblast_embed/raw_side_pairplot.png" /></p>
+</div>
+<div>
+<p><img alt="center" src="../results/figs/nblast_embed/raw_class_pairplot.png" /></p>
+</div>
+</div>
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/nblast_embed/raw_side_scatter.png" /></p>
+<hr class="docutils" />
+<p><img alt="center h:600" src="../results/figs/nblast_embed/raw_clustermap.png" /></p>
 </section>
 
     <script type="text/x-thebe-config">
@@ -535,15 +768,38 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#benjamin-d-pedigo">Benjamin D. Pedigo</a></li>
 </ul>
 </li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#cell-types">Cell types</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#cell-types-and-distribution-shift">Cell types and “distribution shift”</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#matters-for-both-inductive-and-de-novo-cell-typing">Matters for both “inductive” and “de novo” cell typing</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#antennal-lobe-as-a-test-case">Antennal lobe as a test case</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#graph-matching">Graph matching</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#cosine-similarity">Cosine similarity</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#but-implicitly">But implicitly…</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#optimal-transport">Optimal transport</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#earth-mover-s-distance">Earth mover’s distance</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#nblast-clustering-suggests-this-could-be-happening">NBLAST clustering suggests this could be happening</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#nblast-embedding">NBLAST embedding</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#how-to-line-things-up-based-on-nblast">How to line things up, based on NBLAST?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#linear-assignment-problem">Linear assignment problem</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intuition">Intuition:</a></li>
 </ul>
 </li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#optimal-transport-on-nblast-alone">Optimal transport on NBLAST alone</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#issue-with-a-hard-matching">Issue with a “hard” matching?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Issue with a “hard” matching?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#smoother-matchings">Smoother matchings</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#regularized-optimal-transport">Regularized optimal transport</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">Intuition</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#benefit-hopefully-of-a-smoother-matching">Benefit (hopefully) of a smoother matching</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Benefit (hopefully) of a smoother matching</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#what-if-we-want-to-include-connectivity">What if we want to include connectivity?</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cosine-similarity">Cosine similarity:</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#graph-matching">Graph matching</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#accuracy-on-known-labels">Accuracy on known labels</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#connectivity-score-low-is-good">Connectivity score (low is good)</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#nblast-score-high-is-good">NBLAST score (high is good)</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#can-we-tell-when-we-re-wrong">Can we tell when we’re wrong?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Can we tell when we’re wrong?</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#todos">TODOs</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#appendix">Appendix</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#using-this-rough-assignment-to-induce-a-matching-for-connectivity">Using this rough assignment to induce a matching for connectivity</a></li>
 </ul>
 
