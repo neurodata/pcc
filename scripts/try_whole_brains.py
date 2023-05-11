@@ -42,7 +42,7 @@ def gluefig(name, fig, **kwargs):
 # %%
 
 
-def load_nblast(queries=None):
+def load_nblast():
     data_dir = DATA_PATH / "hackathon"
 
     nblast = pl.scan_ipc(
@@ -51,22 +51,22 @@ def load_nblast(queries=None):
     )
     index = pd.Index(nblast.select("index").collect().to_pandas()["index"])
     columns = pd.Index(nblast.columns[1:])
-    index_ids = index.str.split(",", expand=True).get_level_values(0).astype(int)
+
+    if index.dtype == "object":
+        index_ids = index.str.split(",", expand=True).get_level_values(0).astype(int)
+    else:
+        index_ids = index
     column_ids = columns.str.split(",", expand=True).get_level_values(0).astype(int)
+
+    print(column_ids)
+
     index_ids_map = dict(zip(index_ids, index))
     column_ids_map = dict(zip(column_ids, columns))
     index_ids_reverse_map = dict(zip(index, index_ids))
     column_ids_reverse_map = dict(zip(columns, column_ids))
 
-    if queries is None:
-        query_node_ids = index
-    elif not isinstance(queries, tuple):
-        query_node_ids = queries
-    else:
-        query_node_ids = np.concatenate(queries)
-
-    query_index = pd.Series([index_ids_map[i] for i in query_node_ids])
-    query_columns = pd.Series(["index"] + [column_ids_map[i] for i in query_node_ids])
+    query_index = pd.Series([index_ids_map[i] for i in index])
+    query_columns = pd.Series(["index"] + [column_ids_map[i] for i in columns])
 
     nblast = nblast.with_columns(
         pl.col("index").is_in(query_index).alias("select_index")
@@ -88,7 +88,10 @@ def load_nblast(queries=None):
 
 
 currtime = time.time()
-nblast = load_nblast()
+# nblast = load_nblast()
+nblast = pd.read_feather(
+    data_dir / "nblast" / "nblast_flywire_mcns_comp.feather",
+)
 print(
     f"{time.time() - currtime:.3f} seconds elapsed to load FlyWire vs. MaleCNS NBLASTs."
 )
