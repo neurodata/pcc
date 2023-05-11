@@ -6,10 +6,8 @@ import numpy as np
 import ot
 import pandas as pd
 import seaborn as sns
-from pkg.data import DATA_PATH
-from pkg.io import glue as default_glue
-from pkg.io import savefig
 
+from pkg.data import DATA_PATH
 
 data_dir = DATA_PATH / "hackathon"
 
@@ -20,7 +18,7 @@ currtime = time.time()
 nblast = pd.read_feather(
     data_dir / "nblast" / "nblast" / "nblast_flywire_mcns_comp.feather",
 )
-nblast = nblast.astype(np.float16, copy=False)
+nblast = nblast.astype(float, copy=False)
 print(
     f"{time.time() - currtime:.3f} seconds elapsed to load FlyWire vs. MaleCNS NBLASTs."
 )
