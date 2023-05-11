@@ -90,7 +90,7 @@ def load_nblast():
 currtime = time.time()
 # nblast = load_nblast()
 nblast = pd.read_feather(
-    data_dir / "nblast" / "nblast_flywire_mcns_comp.feather",
+    data_dir / "nblast" / "nblast" / "nblast_flywire_mcns_comp.feather",
 )
 print(
     f"{time.time() - currtime:.3f} seconds elapsed to load FlyWire vs. MaleCNS NBLASTs."
