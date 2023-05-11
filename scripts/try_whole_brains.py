@@ -5,49 +5,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ot
 import pandas as pd
-import polars as pl
 import seaborn as sns
 from pkg.data import DATA_PATH
-from pkg.io import OUT_PATH
 from pkg.io import glue as default_glue
 from pkg.io import savefig
-from scipy.optimize import linear_sum_assignment
-from tqdm.autonotebook import tqdm
 
-from giskard.plot import confusionplot, matrixplot
-from graspologic.match import graph_match
-from neuropull.graph import NetworkFrame
-from pkg.data import load_flywire_networkframe
-from pkg.data import load_flywire_nblast_subset
-
-DISPLAY_FIGS = True
-FILENAME = "try_whole_brains"
 
 data_dir = DATA_PATH / "hackathon"
-
-
-def glue(name, var, **kwargs):
-    default_glue(name, var, FILENAME, **kwargs)
-
-
-def gluefig(name, fig, **kwargs):
-    savefig(name, foldername=FILENAME, **kwargs)
-
-    glue(name, fig, figure=True)
-
-    if not DISPLAY_FIGS:
-        plt.close()
 
 
 # %%
 
 currtime = time.time()
-# nblast = load_nblast()
-
 nblast = pd.read_feather(
     data_dir / "nblast" / "nblast" / "nblast_flywire_mcns_comp.feather",
 )
-nblast = nblast.astype(float, copy=False)
+nblast = nblast.astype(np.float16, copy=False)
 print(
     f"{time.time() - currtime:.3f} seconds elapsed to load FlyWire vs. MaleCNS NBLASTs."
 )
