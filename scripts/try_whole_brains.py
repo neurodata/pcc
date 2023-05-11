@@ -59,7 +59,7 @@ n_right = nblast.shape[1]
 
 a = np.ones(n_left)
 b = np.ones(n_right) / n_right * n_left
-S = nblast.values.astype(float)
+S = nblast.values
 
 currtime = time.time()
 sinkhorn_sol, log = ot.sinkhorn(
