@@ -30,7 +30,7 @@ sparse_adj = csr_array(
 # %%
 from graspologic.embed import AdjacencySpectralEmbed
 
-ase = AdjacencySpectralEmbed(n_components=12)
+ase = AdjacencySpectralEmbed(n_components=16)
 X_out, X_in = ase.fit_transform(sparse_adj)
 
 
@@ -106,13 +106,14 @@ labels = merged_nodes["cell_type"].fillna("Unknown")
 # %%
 from giskard.plot import pairplot
 
-pairplot(X_out, labels=labels, palette="tab20")
+pairplot(X_out[:, :8], labels=labels, palette="tab20")
 
 # %%
-pairplot(X_in, labels=labels, palette="tab20")
+pairplot(X_in[:, :8], labels=labels, palette="tab20")
 
 # %%
-from giskard.plot import simple_umap_scatterplot
+# from giskard.plot import simple_umap_scatterplot
 
-simple_umap_scatterplot(X_in, labels=labels, palette="tab20", metric="cosine")
-s
+# simple_umap_scatterplot(X_in, labels=labels, palette="tab20", metric="cosine")
+
+#%%
