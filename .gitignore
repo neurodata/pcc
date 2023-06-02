@@ -150,6 +150,7 @@ results/*
 
 !results/figs 
 results/figs/*
+!results/figs/transport
 !results/figs/.gitkeep
 
 !results/outputs 
